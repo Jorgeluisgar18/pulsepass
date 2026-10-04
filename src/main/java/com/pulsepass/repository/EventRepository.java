@@ -18,6 +18,10 @@ public interface EventRepository
             String eventCode
     );
 
+    boolean existsByEventCode(
+            String eventCode
+    );
+
     List<Event> findByStatusOrderByEventDateAsc(
             EventStatus status
     );
