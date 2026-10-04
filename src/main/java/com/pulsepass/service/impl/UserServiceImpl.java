@@ -1,4 +1,4 @@
-package com.pulsepass.service.impl;
+package com.pulsepass.service;
 
 import com.pulsepass.domain.User;
 import com.pulsepass.domain.UserProfile;

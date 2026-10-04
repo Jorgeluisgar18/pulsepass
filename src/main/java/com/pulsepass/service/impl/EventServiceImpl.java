@@ -1,4 +1,4 @@
-package com.pulsepass.service.impl;
+package com.pulsepass.service;
 
 import com.pulsepass.domain.Artist;
 import com.pulsepass.domain.Event;
