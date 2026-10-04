@@ -1,4 +1,4 @@
-package com.pulsepass.service;
+package com.pulsepass.service.impl;
 
 import com.pulsepass.domain.Venue;
 import com.pulsepass.dto.response.VenueResponse;
