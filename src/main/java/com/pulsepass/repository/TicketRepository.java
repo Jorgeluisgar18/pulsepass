@@ -27,7 +27,16 @@ public interface TicketRepository
             TicketStatus status
     );
 
+    List<Ticket> findByUserEmailIgnoreCaseOrderByPurchaseDateDesc(
+            String email
+    );
+
     List<Ticket> findByEventEventCodeAndStatus(
+            String eventCode,
+            TicketStatus status
+    );
+
+    long countByEventEventCodeAndStatus(
             String eventCode,
             TicketStatus status
     );

@@ -80,6 +80,11 @@ public class Event {
     public void setStreamingUrl(String streamingUrl) {
         this.streamingUrl = streamingUrl;
     }
+
+    public void changeStatus(EventStatus status) {
+        this.status = status;
+    }
+
     public void addArtist(Artist artist) {
         this.artists.add(artist);
         artist.getEvents().add(this);
