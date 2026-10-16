@@ -6,14 +6,20 @@ import com.pulsepass.domain.Ticket;
 import com.pulsepass.domain.TicketStatus;
 import com.pulsepass.domain.User;
 import com.pulsepass.domain.UserProfile;
+
 import com.pulsepass.dto.request.PurchaseTicketRequest;
 import com.pulsepass.dto.response.TicketResponse;
+
 import com.pulsepass.exception.BusinessRuleException;
 import com.pulsepass.exception.ResourceNotFoundException;
+
 import com.pulsepass.mapper.TicketMapper;
+
 import com.pulsepass.repository.EventRepository;
 import com.pulsepass.repository.TicketRepository;
 import com.pulsepass.repository.UserRepository;
+
+import com.pulsepass.service.AuthorizationService;
 import com.pulsepass.service.TicketService;
 import com.pulsepass.service.pricing.TicketPricingPolicy;
 
@@ -21,9 +27,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Period;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -35,19 +43,33 @@ public class TicketServiceImpl implements TicketService {
     private final EventRepository eventRepository;
     private final TicketMapper ticketMapper;
     private final TicketPricingPolicy ticketPricingPolicy;
+    private final AuthorizationService authorizationService;
 
     public TicketServiceImpl(
             TicketRepository ticketRepository,
             UserRepository userRepository,
             EventRepository eventRepository,
             TicketMapper ticketMapper,
-            TicketPricingPolicy ticketPricingPolicy
+            TicketPricingPolicy ticketPricingPolicy,
+            AuthorizationService authorizationService
     ) {
-        this.ticketRepository = ticketRepository;
-        this.userRepository = userRepository;
-        this.eventRepository = eventRepository;
-        this.ticketMapper = ticketMapper;
-        this.ticketPricingPolicy = ticketPricingPolicy;
+        this.ticketRepository =
+                ticketRepository;
+
+        this.userRepository =
+                userRepository;
+
+        this.eventRepository =
+                eventRepository;
+
+        this.ticketMapper =
+                ticketMapper;
+
+        this.ticketPricingPolicy =
+                ticketPricingPolicy;
+
+        this.authorizationService =
+                authorizationService;
     }
 
     @Override
@@ -56,36 +78,50 @@ public class TicketServiceImpl implements TicketService {
             PurchaseTicketRequest request
     ) {
 
-        User user = userRepository
-                .findByEmailIgnoreCase(
-                        request.userEmail()
-                )
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "User not found: "
-                                        + request.userEmail()
+        User user =
+                userRepository
+                        .findByEmailIgnoreCase(
+                                request.userEmail()
                         )
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "User not found: "
+                                                + request.userEmail()
+                                )
+                        );
+
+        /*
+         * Protección anti-IDOR:
+         * un USER solo puede comprar para sí mismo.
+         */
+        authorizationService
+                .requireSelf(
+                        user
                 );
 
         if (!user.isActive()) {
+
             throw new BusinessRuleException(
                     "User is inactive: "
                             + user.getEmail()
             );
         }
 
-        Event event = eventRepository
-                .findByEventCode(
-                        request.eventCode()
-                )
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Event not found: "
-                                        + request.eventCode()
+        Event event =
+                eventRepository
+                        .findByEventCode(
+                                request.eventCode()
                         )
-                );
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "Event not found: "
+                                                + request.eventCode()
+                                )
+                        );
 
-        validateEventForPurchase(event);
+        validateEventForPurchase(
+                event
+        );
 
         validateMinimumAge(
                 user,
@@ -100,9 +136,11 @@ public class TicketServiceImpl implements TicketService {
                         );
 
         int capacity =
-                event.getVenue().getCapacity();
+                event.getVenue()
+                        .getCapacity();
 
         if (paidTickets >= capacity) {
+
             throw new BusinessRuleException(
                     "Event has no available capacity: "
                             + event.getEventCode()
@@ -115,31 +153,38 @@ public class TicketServiceImpl implements TicketService {
                 );
 
         if (price.signum() < 0) {
+
             throw new BusinessRuleException(
                     "Ticket price cannot be negative."
             );
         }
 
-        Ticket ticket = new Ticket(
-                generateTicketCode(),
-                request.type(),
-                price,
-                TicketStatus.PAID,
-                LocalDateTime.now(),
-                user,
-                event
-        );
+        Ticket ticket =
+                new Ticket(
+                        generateTicketCode(),
+                        request.type(),
+                        price,
+                        TicketStatus.PAID,
+                        LocalDateTime.now(),
+                        user,
+                        event
+                );
 
         Ticket savedTicket =
-                ticketRepository.save(ticket);
+                ticketRepository.save(
+                        ticket
+                );
 
-        if (paidTickets + 1 == capacity) {
+        if (paidTickets + 1
+                == capacity) {
 
             event.changeStatus(
                     EventStatus.SOLD_OUT
             );
 
-            eventRepository.save(event);
+            eventRepository.save(
+                    event
+            );
         }
 
         return ticketMapper.toResponse(
@@ -154,9 +199,18 @@ public class TicketServiceImpl implements TicketService {
     ) {
 
         Ticket ticket =
-                findTicket(ticketCode);
+                findTicket(
+                        ticketCode
+                );
 
-        return ticketMapper.toResponse(ticket);
+        authorizationService
+                .requireTicketReadAccess(
+                        ticket
+                );
+
+        return ticketMapper.toResponse(
+                ticket
+        );
     }
 
     @Override
@@ -165,12 +219,31 @@ public class TicketServiceImpl implements TicketService {
             String email
     ) {
 
+        User requestedUser =
+                userRepository
+                        .findByEmailIgnoreCase(
+                                email
+                        )
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "User not found: "
+                                                + email
+                                )
+                        );
+
+        authorizationService
+                .requireSelfOrAdmin(
+                        requestedUser
+                );
+
         return ticketRepository
                 .findByUserEmailIgnoreCaseOrderByPurchaseDateDesc(
                         email
                 )
                 .stream()
-                .map(ticketMapper::toResponse)
+                .map(
+                        ticketMapper::toResponse
+                )
                 .toList();
     }
 
@@ -186,7 +259,9 @@ public class TicketServiceImpl implements TicketService {
                         TicketStatus.PAID
                 )
                 .stream()
-                .map(ticketMapper::toResponse)
+                .map(
+                        ticketMapper::toResponse
+                )
                 .toList();
     }
 
@@ -197,7 +272,18 @@ public class TicketServiceImpl implements TicketService {
     ) {
 
         Ticket ticket =
-                findTicket(ticketCode);
+                findTicket(
+                        ticketCode
+                );
+
+        /*
+         * Debe autorizarse antes de realizar
+         * cualquier cambio sobre el ticket.
+         */
+        authorizationService
+                .requireTicketCancelAccess(
+                        ticket
+                );
 
         if (ticket.getStatus()
                 != TicketStatus.PAID) {
@@ -223,7 +309,9 @@ public class TicketServiceImpl implements TicketService {
         );
 
         Ticket savedTicket =
-                ticketRepository.save(ticket);
+                ticketRepository.save(
+                        ticket
+                );
 
         return ticketMapper.toResponse(
                 savedTicket
@@ -237,7 +325,9 @@ public class TicketServiceImpl implements TicketService {
     ) {
 
         Ticket ticket =
-                findTicket(ticketCode);
+                findTicket(
+                        ticketCode
+                );
 
         if (ticket.getStatus()
                 != TicketStatus.PAID) {
@@ -252,7 +342,9 @@ public class TicketServiceImpl implements TicketService {
         );
 
         Ticket savedTicket =
-                ticketRepository.save(ticket);
+                ticketRepository.save(
+                        ticket
+                );
 
         return ticketMapper.toResponse(
                 savedTicket
@@ -264,7 +356,9 @@ public class TicketServiceImpl implements TicketService {
     ) {
 
         return ticketRepository
-                .findByTicketCode(ticketCode)
+                .findByTicketCode(
+                        ticketCode
+                )
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Ticket not found: "
@@ -286,7 +380,9 @@ public class TicketServiceImpl implements TicketService {
         }
 
         if (!event.getEventDate()
-                .isAfter(LocalDateTime.now())) {
+                .isAfter(
+                        LocalDateTime.now()
+                )) {
 
             throw new BusinessRuleException(
                     "Cannot purchase tickets for an event that already occurred."
@@ -304,6 +400,7 @@ public class TicketServiceImpl implements TicketService {
 
         if (minimumAge == null
                 || minimumAge == 0) {
+
             return;
         }
 
@@ -311,7 +408,8 @@ public class TicketServiceImpl implements TicketService {
                 user.getProfile();
 
         if (profile == null
-                || profile.getBirthDate() == null) {
+                || profile.getBirthDate()
+                == null) {
 
             throw new BusinessRuleException(
                     "User birth date is required to validate minimum age."

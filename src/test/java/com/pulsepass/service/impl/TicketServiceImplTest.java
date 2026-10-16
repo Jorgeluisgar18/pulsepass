@@ -9,14 +9,20 @@ import com.pulsepass.domain.TicketType;
 import com.pulsepass.domain.User;
 import com.pulsepass.domain.UserProfile;
 import com.pulsepass.domain.Venue;
+
 import com.pulsepass.dto.request.PurchaseTicketRequest;
 import com.pulsepass.dto.response.TicketResponse;
+
 import com.pulsepass.exception.BusinessRuleException;
 import com.pulsepass.exception.ResourceNotFoundException;
+
 import com.pulsepass.mapper.TicketMapper;
+
 import com.pulsepass.repository.EventRepository;
 import com.pulsepass.repository.TicketRepository;
 import com.pulsepass.repository.UserRepository;
+
+import com.pulsepass.service.AuthorizationService;
 import com.pulsepass.service.pricing.TicketPricingPolicy;
 
 import org.junit.jupiter.api.Test;
@@ -27,9 +33,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.security.access.AccessDeniedException;
+
 import java.math.BigDecimal;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +49,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -60,19 +73,17 @@ class TicketServiceImplTest {
     @Mock
     private TicketPricingPolicy ticketPricingPolicy;
 
+    @Mock
+    private AuthorizationService authorizationService;
+
     @InjectMocks
     private TicketServiceImpl ticketService;
-
-
-    // ---------------------------------------------------------
-    // TEST-TICKET-001
-    // Compra válida -> ticket PAID
-    // ---------------------------------------------------------
 
     @Test
     void shouldPurchaseTicketSuccessfully() {
 
-        User user = activeAdultUser();
+        User user =
+                activeAdultUser();
 
         Event event =
                 eventWithStatus(
@@ -85,7 +96,9 @@ class TicketServiceImplTest {
                 validRequest();
 
         BigDecimal price =
-                new BigDecimal("120000.00");
+                new BigDecimal(
+                        "120000.00"
+                );
 
         TicketResponse expectedResponse =
                 ticketResponse(
@@ -115,13 +128,17 @@ class TicketServiceImplTest {
                                 eq("CMF-2026"),
                                 eq(TicketStatus.PAID)
                         )
-        ).thenReturn(0L);
+        ).thenReturn(
+                0L
+        );
 
         when(
                 ticketPricingPolicy.calculate(
                         TicketType.GENERAL
                 )
-        ).thenReturn(price);
+        ).thenReturn(
+                price
+        );
 
         when(
                 ticketRepository.save(
@@ -143,7 +160,9 @@ class TicketServiceImplTest {
         );
 
         TicketResponse result =
-                ticketService.purchase(request);
+                ticketService.purchase(
+                        request
+                );
 
         ArgumentCaptor<Ticket> captor =
                 ArgumentCaptor.forClass(
@@ -151,41 +170,66 @@ class TicketServiceImplTest {
                 );
 
         verify(ticketRepository)
-                .save(captor.capture());
+                .save(
+                        captor.capture()
+                );
 
         Ticket savedTicket =
                 captor.getValue();
 
         assertThat(result)
-                .isEqualTo(expectedResponse);
+                .isEqualTo(
+                        expectedResponse
+                );
 
-        assertThat(savedTicket.getStatus())
-                .isEqualTo(TicketStatus.PAID);
+        assertThat(
+                savedTicket.getStatus()
+        ).isEqualTo(
+                TicketStatus.PAID
+        );
 
-        assertThat(savedTicket.getType())
-                .isEqualTo(TicketType.GENERAL);
+        assertThat(
+                savedTicket.getType()
+        ).isEqualTo(
+                TicketType.GENERAL
+        );
 
-        assertThat(savedTicket.getPrice())
-                .isEqualByComparingTo(price);
+        assertThat(
+                savedTicket.getPrice()
+        ).isEqualByComparingTo(
+                price
+        );
 
-        assertThat(savedTicket.getUser())
-                .isSameAs(user);
+        assertThat(
+                savedTicket.getUser()
+        ).isSameAs(
+                user
+        );
 
-        assertThat(savedTicket.getEvent())
-                .isSameAs(event);
+        assertThat(
+                savedTicket.getEvent()
+        ).isSameAs(
+                event
+        );
 
-        assertThat(savedTicket.getTicketCode())
-                .startsWith("TKT-");
+        assertThat(
+                savedTicket.getTicketCode()
+        ).startsWith(
+                "TKT-"
+        );
 
-        verify(eventRepository, never())
-                .save(any(Event.class));
+        verify(authorizationService)
+                .requireSelf(
+                        user
+                );
+
+        verify(
+                eventRepository,
+                never()
+        ).save(
+                any(Event.class)
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-TICKET-002
-    // Usuario inexistente
-    // ---------------------------------------------------------
 
     @Test
     void shouldRejectPurchaseWhenUserDoesNotExist() {
@@ -202,7 +246,9 @@ class TicketServiceImplTest {
         );
 
         assertThatThrownBy(() ->
-                ticketService.purchase(request)
+                ticketService.purchase(
+                        request
+                )
         )
                 .isInstanceOf(
                         ResourceNotFoundException.class
@@ -211,18 +257,79 @@ class TicketServiceImplTest {
                         request.userEmail()
                 );
 
-        verify(eventRepository, never())
-                .findByEventCode(anyString());
+        verify(
+                authorizationService,
+                never()
+        ).requireSelf(
+                any(User.class)
+        );
 
-        verify(ticketRepository, never())
-                .save(any(Ticket.class));
+        verify(
+                eventRepository,
+                never()
+        ).findByEventCode(
+                anyString()
+        );
+
+        verify(
+                ticketRepository,
+                never()
+        ).save(
+                any(Ticket.class)
+        );
     }
 
+    @Test
+    void shouldRejectPurchaseForAnotherUser() {
 
-    // ---------------------------------------------------------
-    // TEST-TICKET-003
-    // Usuario inactivo
-    // ---------------------------------------------------------
+        User user =
+                activeAdultUser();
+
+        PurchaseTicketRequest request =
+                validRequest();
+
+        when(
+                userRepository.findByEmailIgnoreCase(
+                        request.userEmail()
+                )
+        ).thenReturn(
+                Optional.of(user)
+        );
+
+        doThrow(
+                new AccessDeniedException(
+                        "Access denied"
+                )
+        )
+                .when(
+                        authorizationService
+                )
+                .requireSelf(
+                        user
+                );
+
+        assertThatThrownBy(() ->
+                ticketService.purchase(
+                        request
+                )
+        ).isInstanceOf(
+                AccessDeniedException.class
+        );
+
+        verify(
+                eventRepository,
+                never()
+        ).findByEventCode(
+                anyString()
+        );
+
+        verify(
+                ticketRepository,
+                never()
+        ).save(
+                any(Ticket.class)
+        );
+    }
 
     @Test
     void shouldRejectPurchaseWhenUserIsInactive() {
@@ -246,7 +353,9 @@ class TicketServiceImplTest {
         );
 
         assertThatThrownBy(() ->
-                ticketService.purchase(request)
+                ticketService.purchase(
+                        request
+                )
         )
                 .isInstanceOf(
                         BusinessRuleException.class
@@ -255,23 +364,19 @@ class TicketServiceImplTest {
                         "inactive"
                 );
 
-        verify(eventRepository, never())
-                .findByEventCode(anyString());
-
-        verify(ticketRepository, never())
-                .save(any(Ticket.class));
+        verify(
+                eventRepository,
+                never()
+        ).findByEventCode(
+                anyString()
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-TICKET-004
-    // Evento DRAFT
-    // ---------------------------------------------------------
 
     @Test
     void shouldRejectPurchaseForDraftEvent() {
 
-        User user = activeAdultUser();
+        User user =
+                activeAdultUser();
 
         Event event =
                 eventWithStatus(
@@ -300,7 +405,9 @@ class TicketServiceImplTest {
         );
 
         assertThatThrownBy(() ->
-                ticketService.purchase(request)
+                ticketService.purchase(
+                        request
+                )
         )
                 .isInstanceOf(
                         BusinessRuleException.class
@@ -309,23 +416,19 @@ class TicketServiceImplTest {
                         "PUBLISHED"
                 );
 
-        verify(ticketRepository, never())
-                .save(any(Ticket.class));
-
-        verify(ticketPricingPolicy, never())
-                .calculate(any(TicketType.class));
+        verify(
+                ticketRepository,
+                never()
+        ).save(
+                any(Ticket.class)
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-TICKET-005
-    // Evento CANCELLED
-    // ---------------------------------------------------------
 
     @Test
     void shouldRejectPurchaseForCancelledEvent() {
 
-        User user = activeAdultUser();
+        User user =
+                activeAdultUser();
 
         Event event =
                 eventWithStatus(
@@ -354,7 +457,9 @@ class TicketServiceImplTest {
         );
 
         assertThatThrownBy(() ->
-                ticketService.purchase(request)
+                ticketService.purchase(
+                        request
+                )
         )
                 .isInstanceOf(
                         BusinessRuleException.class
@@ -363,15 +468,13 @@ class TicketServiceImplTest {
                         "PUBLISHED"
                 );
 
-        verify(ticketRepository, never())
-                .save(any(Ticket.class));
+        verify(
+                ticketRepository,
+                never()
+        ).save(
+                any(Ticket.class)
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-TICKET-006
-    // Usuario menor de edad
-    // ---------------------------------------------------------
 
     @Test
     void shouldRejectUnderageUser() {
@@ -402,7 +505,9 @@ class TicketServiceImplTest {
                         request.userEmail()
                 )
         ).thenReturn(
-                Optional.of(underageUser)
+                Optional.of(
+                        underageUser
+                )
         );
 
         when(
@@ -414,7 +519,9 @@ class TicketServiceImplTest {
         );
 
         assertThatThrownBy(() ->
-                ticketService.purchase(request)
+                ticketService.purchase(
+                        request
+                )
         )
                 .isInstanceOf(
                         BusinessRuleException.class
@@ -423,26 +530,19 @@ class TicketServiceImplTest {
                         "minimum age"
                 );
 
-        verify(ticketRepository, never())
-                .countByEventEventCodeAndStatus(
-                        anyString(),
-                        any(TicketStatus.class)
-                );
-
-        verify(ticketRepository, never())
-                .save(any(Ticket.class));
+        verify(
+                ticketRepository,
+                never()
+        ).save(
+                any(Ticket.class)
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-TICKET-007
-    // Sin capacidad
-    // ---------------------------------------------------------
 
     @Test
     void shouldRejectPurchaseWhenEventHasNoCapacity() {
 
-        User user = activeAdultUser();
+        User user =
+                activeAdultUser();
 
         Event event =
                 eventWithStatus(
@@ -476,10 +576,14 @@ class TicketServiceImplTest {
                                 "CMF-2026",
                                 TicketStatus.PAID
                         )
-        ).thenReturn(3L);
+        ).thenReturn(
+                3L
+        );
 
         assertThatThrownBy(() ->
-                ticketService.purchase(request)
+                ticketService.purchase(
+                        request
+                )
         )
                 .isInstanceOf(
                         BusinessRuleException.class
@@ -488,23 +592,26 @@ class TicketServiceImplTest {
                         "capacity"
                 );
 
-        verify(ticketPricingPolicy, never())
-                .calculate(any(TicketType.class));
+        verify(
+                ticketPricingPolicy,
+                never()
+        ).calculate(
+                any(TicketType.class)
+        );
 
-        verify(ticketRepository, never())
-                .save(any(Ticket.class));
+        verify(
+                ticketRepository,
+                never()
+        ).save(
+                any(Ticket.class)
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-TICKET-008
-    // Último cupo -> Ticket PAID + Event SOLD_OUT
-    // ---------------------------------------------------------
 
     @Test
     void shouldMarkEventSoldOutWhenLastTicketIsPurchased() {
 
-        User user = activeAdultUser();
+        User user =
+                activeAdultUser();
 
         Event event =
                 eventWithStatus(
@@ -517,7 +624,9 @@ class TicketServiceImplTest {
                 validRequest();
 
         BigDecimal price =
-                new BigDecimal("120000.00");
+                new BigDecimal(
+                        "120000.00"
+                );
 
         TicketResponse expectedResponse =
                 ticketResponse(
@@ -547,13 +656,17 @@ class TicketServiceImplTest {
                                 "CMF-2026",
                                 TicketStatus.PAID
                         )
-        ).thenReturn(2L);
+        ).thenReturn(
+                2L
+        );
 
         when(
                 ticketPricingPolicy.calculate(
                         TicketType.GENERAL
                 )
-        ).thenReturn(price);
+        ).thenReturn(
+                price
+        );
 
         when(
                 ticketRepository.save(
@@ -567,8 +680,12 @@ class TicketServiceImplTest {
         );
 
         when(
-                eventRepository.save(event)
-        ).thenReturn(event);
+                eventRepository.save(
+                        event
+                )
+        ).thenReturn(
+                event
+        );
 
         when(
                 ticketMapper.toResponse(
@@ -579,28 +696,198 @@ class TicketServiceImplTest {
         );
 
         TicketResponse result =
-                ticketService.purchase(request);
-
-        assertThat(result)
-                .isEqualTo(expectedResponse);
-
-        assertThat(event.getStatus())
-                .isEqualTo(
-                        EventStatus.SOLD_OUT
+                ticketService.purchase(
+                        request
                 );
 
-        verify(ticketRepository)
-                .save(any(Ticket.class));
+        assertThat(result)
+                .isEqualTo(
+                        expectedResponse
+                );
+
+        assertThat(
+                event.getStatus()
+        ).isEqualTo(
+                EventStatus.SOLD_OUT
+        );
 
         verify(eventRepository)
-                .save(event);
+                .save(
+                        event
+                );
     }
 
+    @Test
+    void shouldFindTicketByCodeWhenAuthorized() {
 
-    // ---------------------------------------------------------
-    // TEST-TICKET-009
-    // Cancelar PAID -> CANCELLED
-    // ---------------------------------------------------------
+        Event event =
+                eventWithStatus(
+                        EventStatus.PUBLISHED,
+                        18,
+                        3
+                );
+
+        Ticket ticket =
+                ticket(
+                        event,
+                        TicketStatus.PAID
+                );
+
+        TicketResponse response =
+                ticketResponse(
+                        TicketStatus.PAID,
+                        ticket.getPrice()
+                );
+
+        when(
+                ticketRepository.findByTicketCode(
+                        "TKT-001"
+                )
+        ).thenReturn(
+                Optional.of(ticket)
+        );
+
+        when(
+                ticketMapper.toResponse(
+                        ticket
+                )
+        ).thenReturn(
+                response
+        );
+
+        TicketResponse result =
+                ticketService.findByCode(
+                        "TKT-001"
+                );
+
+        assertThat(result)
+                .isEqualTo(
+                        response
+                );
+
+        verify(authorizationService)
+                .requireTicketReadAccess(
+                        ticket
+                );
+    }
+
+    @Test
+    void shouldRejectReadingAnotherUsersTicket() {
+
+        Event event =
+                eventWithStatus(
+                        EventStatus.PUBLISHED,
+                        18,
+                        3
+                );
+
+        Ticket ticket =
+                ticket(
+                        event,
+                        TicketStatus.PAID
+                );
+
+        when(
+                ticketRepository.findByTicketCode(
+                        "TKT-001"
+                )
+        ).thenReturn(
+                Optional.of(ticket)
+        );
+
+        doThrow(
+                new AccessDeniedException(
+                        "Access denied"
+                )
+        )
+                .when(
+                        authorizationService
+                )
+                .requireTicketReadAccess(
+                        ticket
+                );
+
+        assertThatThrownBy(() ->
+                ticketService.findByCode(
+                        "TKT-001"
+                )
+        ).isInstanceOf(
+                AccessDeniedException.class
+        );
+
+        verify(
+                ticketMapper,
+                never()
+        ).toResponse(
+                any(Ticket.class)
+        );
+    }
+
+    @Test
+    void shouldFindTicketsByUserEmailWhenAuthorized() {
+
+        User user =
+                activeAdultUser();
+
+        Event event =
+                eventWithStatus(
+                        EventStatus.PUBLISHED,
+                        18,
+                        3
+                );
+
+        Ticket ticket =
+                ticket(
+                        event,
+                        TicketStatus.PAID
+                );
+
+        TicketResponse response =
+                ticketResponse(
+                        TicketStatus.PAID,
+                        ticket.getPrice()
+                );
+
+        when(
+                userRepository.findByEmailIgnoreCase(
+                        "andrea@email.com"
+                )
+        ).thenReturn(
+                Optional.of(user)
+        );
+
+        when(
+                ticketRepository
+                        .findByUserEmailIgnoreCaseOrderByPurchaseDateDesc(
+                                "andrea@email.com"
+                        )
+        ).thenReturn(
+                List.of(ticket)
+        );
+
+        when(
+                ticketMapper.toResponse(
+                        ticket
+                )
+        ).thenReturn(
+                response
+        );
+
+        List<TicketResponse> result =
+                ticketService.findByUserEmail(
+                        "andrea@email.com"
+                );
+
+        assertThat(result)
+                .containsExactly(
+                        response
+                );
+
+        verify(authorizationService)
+                .requireSelfOrAdmin(
+                        user
+                );
+    }
 
     @Test
     void shouldCancelPaidTicket() {
@@ -633,11 +920,17 @@ class TicketServiceImplTest {
         );
 
         when(
-                ticketRepository.save(ticket)
-        ).thenReturn(ticket);
+                ticketRepository.save(
+                        ticket
+                )
+        ).thenReturn(
+                ticket
+        );
 
         when(
-                ticketMapper.toResponse(ticket)
+                ticketMapper.toResponse(
+                        ticket
+                )
         ).thenReturn(
                 expectedResponse
         );
@@ -647,23 +940,85 @@ class TicketServiceImplTest {
                         "TKT-001"
                 );
 
-        assertThat(ticket.getStatus())
-                .isEqualTo(
-                        TicketStatus.CANCELLED
-                );
+        assertThat(
+                ticket.getStatus()
+        ).isEqualTo(
+                TicketStatus.CANCELLED
+        );
 
         assertThat(result)
-                .isEqualTo(expectedResponse);
+                .isEqualTo(
+                        expectedResponse
+                );
+
+        verify(authorizationService)
+                .requireTicketCancelAccess(
+                        ticket
+                );
 
         verify(ticketRepository)
-                .save(ticket);
+                .save(
+                        ticket
+                );
     }
 
+    @Test
+    void shouldRejectCancellationOfAnotherUsersTicketBeforeMutation() {
 
-    // ---------------------------------------------------------
-    // TEST-TICKET-010
-    // Ticket USED no puede cancelarse
-    // ---------------------------------------------------------
+        Event event =
+                eventWithStatus(
+                        EventStatus.PUBLISHED,
+                        18,
+                        3
+                );
+
+        Ticket ticket =
+                ticket(
+                        event,
+                        TicketStatus.PAID
+                );
+
+        when(
+                ticketRepository.findByTicketCode(
+                        "TKT-001"
+                )
+        ).thenReturn(
+                Optional.of(ticket)
+        );
+
+        doThrow(
+                new AccessDeniedException(
+                        "Access denied"
+                )
+        )
+                .when(
+                        authorizationService
+                )
+                .requireTicketCancelAccess(
+                        ticket
+                );
+
+        assertThatThrownBy(() ->
+                ticketService.cancel(
+                        "TKT-001"
+                )
+        ).isInstanceOf(
+                AccessDeniedException.class
+        );
+
+        assertThat(
+                ticket.getStatus()
+        ).isEqualTo(
+                TicketStatus.PAID
+        );
+
+        verify(
+                ticketRepository,
+                never()
+        ).save(
+                any(Ticket.class)
+        );
+    }
 
     @Test
     void shouldRejectCancellationOfUsedTicket() {
@@ -701,18 +1056,13 @@ class TicketServiceImplTest {
                         "PAID"
                 );
 
-        verify(ticketRepository, never())
-                .save(any(Ticket.class));
-
-        assertThat(ticket.getStatus())
-                .isEqualTo(TicketStatus.USED);
+        verify(
+                ticketRepository,
+                never()
+        ).save(
+                any(Ticket.class)
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-TICKET-011
-    // PAID -> USED
-    // ---------------------------------------------------------
 
     @Test
     void shouldMarkPaidTicketAsUsed() {
@@ -745,11 +1095,17 @@ class TicketServiceImplTest {
         );
 
         when(
-                ticketRepository.save(ticket)
-        ).thenReturn(ticket);
+                ticketRepository.save(
+                        ticket
+                )
+        ).thenReturn(
+                ticket
+        );
 
         when(
-                ticketMapper.toResponse(ticket)
+                ticketMapper.toResponse(
+                        ticket
+                )
         ).thenReturn(
                 expectedResponse
         );
@@ -759,23 +1115,17 @@ class TicketServiceImplTest {
                         "TKT-001"
                 );
 
-        assertThat(ticket.getStatus())
-                .isEqualTo(
-                        TicketStatus.USED
-                );
+        assertThat(
+                ticket.getStatus()
+        ).isEqualTo(
+                TicketStatus.USED
+        );
 
         assertThat(result)
-                .isEqualTo(expectedResponse);
-
-        verify(ticketRepository)
-                .save(ticket);
+                .isEqualTo(
+                        expectedResponse
+                );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-TICKET-012
-    // CANCELLED no puede usarse
-    // ---------------------------------------------------------
 
     @Test
     void shouldRejectUsingCancelledTicket() {
@@ -813,19 +1163,13 @@ class TicketServiceImplTest {
                         "PAID"
                 );
 
-        verify(ticketRepository, never())
-                .save(any(Ticket.class));
-
-        assertThat(ticket.getStatus())
-                .isEqualTo(
-                        TicketStatus.CANCELLED
-                );
+        verify(
+                ticketRepository,
+                never()
+        ).save(
+                any(Ticket.class)
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // Helpers
-    // ---------------------------------------------------------
 
     private PurchaseTicketRequest validRequest() {
 
@@ -866,7 +1210,9 @@ class TicketServiceImplTest {
                         birthDate
                 );
 
-        user.assignProfile(profile);
+        user.assignProfile(
+                profile
+        );
 
         return user;
     }
@@ -908,7 +1254,9 @@ class TicketServiceImplTest {
         return new Ticket(
                 "TKT-001",
                 TicketType.GENERAL,
-                new BigDecimal("120000.00"),
+                new BigDecimal(
+                        "120000.00"
+                ),
                 status,
                 LocalDateTime.now(),
                 activeAdultUser(),

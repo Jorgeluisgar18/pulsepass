@@ -2,14 +2,20 @@ package com.pulsepass.service.impl;
 
 import com.pulsepass.domain.User;
 import com.pulsepass.domain.UserProfile;
+
 import com.pulsepass.dto.request.RegisterUserRequest;
 import com.pulsepass.dto.response.UserResponse;
+
 import com.pulsepass.exception.BusinessRuleException;
 import com.pulsepass.exception.DuplicateResourceException;
 import com.pulsepass.exception.ResourceNotFoundException;
+
 import com.pulsepass.mapper.UserMapper;
+
 import com.pulsepass.repository.UserProfileRepository;
 import com.pulsepass.repository.UserRepository;
+
+import com.pulsepass.service.AuthorizationService;
 import com.pulsepass.service.UserService;
 
 import org.springframework.stereotype.Service;
@@ -23,15 +29,25 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
     private final UserMapper userMapper;
+    private final AuthorizationService authorizationService;
 
     public UserServiceImpl(
             UserRepository userRepository,
             UserProfileRepository userProfileRepository,
-            UserMapper userMapper
+            UserMapper userMapper,
+            AuthorizationService authorizationService
     ) {
-        this.userRepository = userRepository;
-        this.userProfileRepository = userProfileRepository;
-        this.userMapper = userMapper;
+        this.userRepository =
+                userRepository;
+
+        this.userProfileRepository =
+                userProfileRepository;
+
+        this.userMapper =
+                userMapper;
+
+        this.authorizationService =
+                authorizationService;
     }
 
     @Override
@@ -43,6 +59,7 @@ public class UserServiceImpl implements UserService {
         if (userRepository.existsByUsername(
                 request.username()
         )) {
+
             throw new DuplicateResourceException(
                     "Username already exists: "
                             + request.username()
@@ -52,6 +69,7 @@ public class UserServiceImpl implements UserService {
         if (userRepository.existsByEmailIgnoreCase(
                 request.email()
         )) {
+
             throw new DuplicateResourceException(
                     "Email already exists: "
                             + request.email()
@@ -67,11 +85,12 @@ public class UserServiceImpl implements UserService {
             );
         }
 
-        User user = new User(
-                request.username(),
-                request.email(),
-                true
-        );
+        User user =
+                new User(
+                        request.username(),
+                        request.email(),
+                        true
+                );
 
         UserProfile profile =
                 new UserProfile(
@@ -82,13 +101,21 @@ public class UserServiceImpl implements UserService {
                         request.birthDate()
                 );
 
-        user.assignProfile(profile);
+        user.assignProfile(
+                profile
+        );
 
-        userRepository.save(user);
+        userRepository.save(
+                user
+        );
 
-        userProfileRepository.save(profile);
+        userProfileRepository.save(
+                profile
+        );
 
-        return userMapper.toResponse(user);
+        return userMapper.toResponse(
+                user
+        );
     }
 
     @Override
@@ -97,16 +124,26 @@ public class UserServiceImpl implements UserService {
             String email
     ) {
 
-        User user = userRepository
-                .findByEmailIgnoreCase(email)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "User not found by email: "
-                                        + email
+        User user =
+                userRepository
+                        .findByEmailIgnoreCase(
+                                email
                         )
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "User not found by email: "
+                                                + email
+                                )
+                        );
+
+        authorizationService
+                .requireSelfOrAdmin(
+                        user
                 );
 
-        return userMapper.toResponse(user);
+        return userMapper.toResponse(
+                user
+        );
     }
 
     @Override
@@ -115,15 +152,25 @@ public class UserServiceImpl implements UserService {
             String username
     ) {
 
-        User user = userRepository
-                .findByUsername(username)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "User not found by username: "
-                                        + username
+        User user =
+                userRepository
+                        .findByUsername(
+                                username
                         )
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "User not found by username: "
+                                                + username
+                                )
+                        );
+
+        authorizationService
+                .requireSelfOrAdmin(
+                        user
                 );
 
-        return userMapper.toResponse(user);
+        return userMapper.toResponse(
+                user
+        );
     }
 }

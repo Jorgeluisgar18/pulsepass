@@ -34,6 +34,7 @@ public class SecurityConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
+
         return new BCryptPasswordEncoder();
     }
 
@@ -99,9 +100,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(
                         auth -> auth
 
-                                // -----------------------------
-                                // Autenticación pública
-                                // -----------------------------
+                                // =============================
+                                // AUTH PUBLICO
+                                // =============================
 
                                 .requestMatchers(
                                         HttpMethod.POST,
@@ -115,9 +116,9 @@ public class SecurityConfig {
                                 )
                                 .permitAll()
 
-                                // -----------------------------
-                                // Venues públicos
-                                // -----------------------------
+                                // =============================
+                                // VENUES PUBLICOS
+                                // =============================
 
                                 .requestMatchers(
                                         HttpMethod.GET,
@@ -125,9 +126,9 @@ public class SecurityConfig {
                                 )
                                 .permitAll()
 
-                                // -----------------------------
-                                // Artists públicos
-                                // -----------------------------
+                                // =============================
+                                // ARTISTS PUBLICOS
+                                // =============================
 
                                 .requestMatchers(
                                         HttpMethod.GET,
@@ -135,9 +136,9 @@ public class SecurityConfig {
                                 )
                                 .permitAll()
 
-                                // -----------------------------
-                                // Eventos publicados
-                                // -----------------------------
+                                // =============================
+                                // EVENTOS PUBLICOS SEGUROS
+                                // =============================
 
                                 .requestMatchers(
                                         HttpMethod.GET,
@@ -145,31 +146,53 @@ public class SecurityConfig {
                                 )
                                 .permitAll()
 
-                                // -----------------------------
-                                // Administración de eventos
-                                // -----------------------------
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/events/by-artist"
+                                )
+                                .permitAll()
+
+                                /*
+                                 * El Service controla que anónimo
+                                 * o USER solo vea PUBLISHED.
+                                 */
+                                .requestMatchers(
+                                        HttpMethod.GET,
+                                        "/api/events/*"
+                                )
+                                .permitAll()
+
+                                // =============================
+                                // ADMINISTRACION DE EVENTOS
+                                // =============================
 
                                 .requestMatchers(
                                         HttpMethod.POST,
                                         "/api/events"
                                 )
-                                .hasRole("ADMIN")
+                                .hasRole(
+                                        "ADMIN"
+                                )
 
                                 .requestMatchers(
                                         HttpMethod.PATCH,
                                         "/api/events/*/publish"
                                 )
-                                .hasRole("ADMIN")
+                                .hasRole(
+                                        "ADMIN"
+                                )
 
                                 .requestMatchers(
                                         HttpMethod.POST,
                                         "/api/events/*/artists/*"
                                 )
-                                .hasRole("ADMIN")
+                                .hasRole(
+                                        "ADMIN"
+                                )
 
-                                // -----------------------------
-                                // Operación de tickets
-                                // -----------------------------
+                                // =============================
+                                // OPERACION DE TICKETS
+                                // =============================
 
                                 .requestMatchers(
                                         HttpMethod.PATCH,
@@ -189,20 +212,22 @@ public class SecurityConfig {
                                         "ADMIN"
                                 )
 
-                                // -----------------------------
-                                // Compra
-                                // -----------------------------
+                                // =============================
+                                // COMPRA DE TICKETS
+                                // =============================
 
                                 .requestMatchers(
                                         HttpMethod.POST,
                                         "/api/tickets"
                                 )
-                                .hasRole("USER")
+                                .hasRole(
+                                        "USER"
+                                )
 
-                                // -----------------------------
-                                // Cancelación
-                                // Ownership se valida después
-                                // -----------------------------
+                                // =============================
+                                // CANCELACION
+                                // Ownership adicional en Service
+                                // =============================
 
                                 .requestMatchers(
                                         HttpMethod.PATCH,
@@ -213,10 +238,10 @@ public class SecurityConfig {
                                         "ADMIN"
                                 )
 
-                                // -----------------------------
-                                // Datos personales
-                                // Ownership se valida después
-                                // -----------------------------
+                                // =============================
+                                // DATOS PERSONALES
+                                // Ownership adicional en Service
+                                // =============================
 
                                 .requestMatchers(
                                         HttpMethod.GET,
@@ -228,9 +253,9 @@ public class SecurityConfig {
                                         "ADMIN"
                                 )
 
-                                // -----------------------------
-                                // Todo lo demás requiere login
-                                // -----------------------------
+                                // =============================
+                                // RESTO DE LA API
+                                // =============================
 
                                 .anyRequest()
                                 .authenticated()

@@ -5,15 +5,21 @@ import com.pulsepass.domain.Event;
 import com.pulsepass.domain.EventCategory;
 import com.pulsepass.domain.EventStatus;
 import com.pulsepass.domain.Venue;
+
 import com.pulsepass.dto.request.CreateEventRequest;
 import com.pulsepass.dto.response.EventResponse;
 import com.pulsepass.dto.response.EventSummaryResponse;
+
 import com.pulsepass.exception.BusinessRuleException;
 import com.pulsepass.exception.ResourceNotFoundException;
+
 import com.pulsepass.mapper.EventMapper;
+
 import com.pulsepass.repository.ArtistRepository;
 import com.pulsepass.repository.EventRepository;
 import com.pulsepass.repository.VenueRepository;
+
+import com.pulsepass.service.AuthorizationService;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +30,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -31,6 +38,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import static org.mockito.ArgumentMatchers.any;
+
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -50,30 +59,24 @@ class EventServiceImplTest {
     @Mock
     private EventMapper eventMapper;
 
+    @Mock
+    private AuthorizationService authorizationService;
+
     @InjectMocks
     private EventServiceImpl eventService;
 
-
-    // ---------------------------------------------------------
-    // TEST-EVENT-001
-    // Evento existente -> retorna DTO
-    // ---------------------------------------------------------
-
     @Test
-    void shouldReturnEventWhenEventExists() {
+    void shouldReturnEventWhenEventExistsAndIsVisible() {
 
-        Venue venue = activeVenue();
+        Venue venue =
+                activeVenue();
 
-        Event event = new Event(
-                "CMF-2026",
-                "Caribbean Music Fest 2026",
-                "Festival musical",
-                EventCategory.MUSIC,
-                EventStatus.DRAFT,
-                futureDate(),
-                18,
-                venue
-        );
+        Event event =
+                event(
+                        "CMF-2026",
+                        EventStatus.DRAFT,
+                        venue
+                );
 
         EventResponse expectedResponse =
                 eventResponse(
@@ -89,7 +92,9 @@ class EventServiceImplTest {
         );
 
         when(
-                eventMapper.toResponse(event)
+                eventMapper.toResponse(
+                        event
+                )
         ).thenReturn(
                 expectedResponse
         );
@@ -100,22 +105,73 @@ class EventServiceImplTest {
                 );
 
         assertThat(result)
-                .isEqualTo(expectedResponse);
+                .isEqualTo(
+                        expectedResponse
+                );
 
-        verify(eventRepository)
-                .findByEventCode(
-                        "CMF-2026"
+        verify(authorizationService)
+                .requireEventVisible(
+                        event
                 );
 
         verify(eventMapper)
-                .toResponse(event);
+                .toResponse(
+                        event
+                );
     }
 
+    @Test
+    void shouldHideDraftEventWhenAuthorizationDeniesAccess() {
 
-    // ---------------------------------------------------------
-    // TEST-EVENT-002
-    // Evento inexistente -> ResourceNotFoundException
-    // ---------------------------------------------------------
+        Venue venue =
+                activeVenue();
+
+        Event event =
+                event(
+                        "CMF-2026",
+                        EventStatus.DRAFT,
+                        venue
+                );
+
+        when(
+                eventRepository.findByEventCode(
+                        "CMF-2026"
+                )
+        ).thenReturn(
+                Optional.of(event)
+        );
+
+        doThrow(
+                new ResourceNotFoundException(
+                        "Event not found: CMF-2026"
+                )
+        )
+                .when(
+                        authorizationService
+                )
+                .requireEventVisible(
+                        event
+                );
+
+        assertThatThrownBy(() ->
+                eventService.findByCode(
+                        "CMF-2026"
+                )
+        )
+                .isInstanceOf(
+                        ResourceNotFoundException.class
+                )
+                .hasMessageContaining(
+                        "CMF-2026"
+                );
+
+        verify(
+                eventMapper,
+                never()
+        ).toResponse(
+                any(Event.class)
+        );
+    }
 
     @Test
     void shouldThrowWhenEventDoesNotExist() {
@@ -140,20 +196,26 @@ class EventServiceImplTest {
                         "UNKNOWN"
                 );
 
-        verify(eventMapper, never())
-                .toResponse(any(Event.class));
+        verify(
+                authorizationService,
+                never()
+        ).requireEventVisible(
+                any(Event.class)
+        );
+
+        verify(
+                eventMapper,
+                never()
+        ).toResponse(
+                any(Event.class)
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-EVENT-003
-    // Crear evento válido -> save ejecutado
-    // ---------------------------------------------------------
 
     @Test
     void shouldCreateValidEvent() {
 
-        Venue venue = activeVenue();
+        Venue venue =
+                activeVenue();
 
         CreateEventRequest request =
                 validCreateRequest();
@@ -197,7 +259,9 @@ class EventServiceImplTest {
         );
 
         EventResponse result =
-                eventService.create(request);
+                eventService.create(
+                        request
+                );
 
         ArgumentCaptor<Event> captor =
                 ArgumentCaptor.forClass(
@@ -205,32 +269,36 @@ class EventServiceImplTest {
                 );
 
         verify(eventRepository)
-                .save(captor.capture());
+                .save(
+                        captor.capture()
+                );
 
         Event savedEvent =
                 captor.getValue();
 
         assertThat(result)
-                .isEqualTo(expectedResponse);
+                .isEqualTo(
+                        expectedResponse
+                );
 
-        assertThat(savedEvent.getEventCode())
-                .isEqualTo("CMF-2026");
+        assertThat(
+                savedEvent.getEventCode()
+        ).isEqualTo(
+                "CMF-2026"
+        );
 
-        assertThat(savedEvent.getStatus())
-                .isEqualTo(EventStatus.DRAFT);
+        assertThat(
+                savedEvent.getStatus()
+        ).isEqualTo(
+                EventStatus.DRAFT
+        );
 
-        assertThat(savedEvent.getVenue())
-                .isSameAs(venue);
-
-        assertThat(savedEvent.getMinimumAge())
-                .isEqualTo(18);
+        assertThat(
+                savedEvent.getVenue()
+        ).isSameAs(
+                venue
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-EVENT-004
-    // Venue inexistente -> error y save nunca ejecutado
-    // ---------------------------------------------------------
 
     @Test
     void shouldNotCreateEventWhenVenueDoesNotExist() {
@@ -253,7 +321,9 @@ class EventServiceImplTest {
         );
 
         assertThatThrownBy(() ->
-                eventService.create(request)
+                eventService.create(
+                        request
+                )
         )
                 .isInstanceOf(
                         ResourceNotFoundException.class
@@ -262,18 +332,13 @@ class EventServiceImplTest {
                         request.venueCode()
                 );
 
-        verify(eventRepository, never())
-                .save(any(Event.class));
-
-        verify(eventMapper, never())
-                .toResponse(any(Event.class));
+        verify(
+                eventRepository,
+                never()
+        ).save(
+                any(Event.class)
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-EVENT-005
-    // Venue inactivo -> BusinessRuleException
-    // ---------------------------------------------------------
 
     @Test
     void shouldNotCreateEventWhenVenueIsInactive() {
@@ -302,11 +367,15 @@ class EventServiceImplTest {
                         request.venueCode()
                 )
         ).thenReturn(
-                Optional.of(inactiveVenue)
+                Optional.of(
+                        inactiveVenue
+                )
         );
 
         assertThatThrownBy(() ->
-                eventService.create(request)
+                eventService.create(
+                        request
+                )
         )
                 .isInstanceOf(
                         BusinessRuleException.class
@@ -315,20 +384,19 @@ class EventServiceImplTest {
                         "inactive"
                 );
 
-        verify(eventRepository, never())
-                .save(any(Event.class));
+        verify(
+                eventRepository,
+                never()
+        ).save(
+                any(Event.class)
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-EVENT-006
-    // Fecha pasada -> BusinessRuleException
-    // ---------------------------------------------------------
 
     @Test
     void shouldNotCreateEventWithPastDate() {
 
-        Venue venue = activeVenue();
+        Venue venue =
+                activeVenue();
 
         CreateEventRequest request =
                 new CreateEventRequest(
@@ -357,7 +425,9 @@ class EventServiceImplTest {
         );
 
         assertThatThrownBy(() ->
-                eventService.create(request)
+                eventService.create(
+                        request
+                )
         )
                 .isInstanceOf(
                         BusinessRuleException.class
@@ -366,31 +436,26 @@ class EventServiceImplTest {
                         "future"
                 );
 
-        verify(eventRepository, never())
-                .save(any(Event.class));
+        verify(
+                eventRepository,
+                never()
+        ).save(
+                any(Event.class)
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-EVENT-007
-    // Publicar DRAFT válido -> PUBLISHED
-    // ---------------------------------------------------------
 
     @Test
     void shouldPublishDraftEvent() {
 
-        Venue venue = activeVenue();
+        Venue venue =
+                activeVenue();
 
-        Event event = new Event(
-                "CMF-2026",
-                "Caribbean Music Fest 2026",
-                "Festival musical",
-                EventCategory.MUSIC,
-                EventStatus.DRAFT,
-                futureDate(),
-                18,
-                venue
-        );
+        Event event =
+                event(
+                        "CMF-2026",
+                        EventStatus.DRAFT,
+                        venue
+                );
 
         EventResponse expectedResponse =
                 eventResponse(
@@ -406,11 +471,17 @@ class EventServiceImplTest {
         );
 
         when(
-                eventRepository.save(event)
-        ).thenReturn(event);
+                eventRepository.save(
+                        event
+                )
+        ).thenReturn(
+                event
+        );
 
         when(
-                eventMapper.toResponse(event)
+                eventMapper.toResponse(
+                        event
+                )
         ).thenReturn(
                 expectedResponse
         );
@@ -420,41 +491,30 @@ class EventServiceImplTest {
                         "CMF-2026"
                 );
 
-        assertThat(event.getStatus())
-                .isEqualTo(
-                        EventStatus.PUBLISHED
-                );
+        assertThat(
+                event.getStatus()
+        ).isEqualTo(
+                EventStatus.PUBLISHED
+        );
 
         assertThat(result)
                 .isEqualTo(
                         expectedResponse
                 );
-
-        verify(eventRepository)
-                .save(event);
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-EVENT-008
-    // Publicar CANCELLED -> error y no persistir
-    // ---------------------------------------------------------
 
     @Test
     void shouldNotPublishCancelledEvent() {
 
-        Venue venue = activeVenue();
+        Venue venue =
+                activeVenue();
 
-        Event event = new Event(
-                "CMF-2026",
-                "Caribbean Music Fest 2026",
-                "Festival musical",
-                EventCategory.MUSIC,
-                EventStatus.CANCELLED,
-                futureDate(),
-                18,
-                venue
-        );
+        Event event =
+                event(
+                        "CMF-2026",
+                        EventStatus.CANCELLED,
+                        venue
+                );
 
         when(
                 eventRepository.findByEventCode(
@@ -476,41 +536,34 @@ class EventServiceImplTest {
                         "DRAFT"
                 );
 
-        verify(eventRepository, never())
-                .save(any(Event.class));
-
-        verify(eventMapper, never())
-                .toResponse(any(Event.class));
+        verify(
+                eventRepository,
+                never()
+        ).save(
+                any(Event.class)
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // BR-EVENT-010
-    // Asociar artista válido
-    // ---------------------------------------------------------
 
     @Test
     void shouldAddArtistToEvent() {
 
-        Venue venue = activeVenue();
+        Venue venue =
+                activeVenue();
 
-        Event event = new Event(
-                "CMF-2026",
-                "Caribbean Music Fest 2026",
-                "Festival musical",
-                EventCategory.MUSIC,
-                EventStatus.DRAFT,
-                futureDate(),
-                18,
-                venue
-        );
+        Event event =
+                event(
+                        "CMF-2026",
+                        EventStatus.DRAFT,
+                        venue
+                );
 
-        Artist artist = new Artist(
-                "Solar Beat",
-                "Colombia",
-                "Electronic",
-                true
-        );
+        Artist artist =
+                new Artist(
+                        "Solar Beat",
+                        "Colombia",
+                        "Electronic",
+                        true
+                );
 
         EventResponse expectedResponse =
                 eventResponse(
@@ -526,17 +579,25 @@ class EventServiceImplTest {
         );
 
         when(
-                artistRepository.findById(1L)
+                artistRepository.findById(
+                        1L
+                )
         ).thenReturn(
                 Optional.of(artist)
         );
 
         when(
-                eventRepository.save(event)
-        ).thenReturn(event);
+                eventRepository.save(
+                        event
+                )
+        ).thenReturn(
+                event
+        );
 
         when(
-                eventMapper.toResponse(event)
+                eventMapper.toResponse(
+                        event
+                )
         ).thenReturn(
                 expectedResponse
         );
@@ -547,46 +608,42 @@ class EventServiceImplTest {
                         1L
                 );
 
-        assertThat(event.getArtists())
-                .contains(artist);
+        assertThat(
+                event.getArtists()
+        ).contains(
+                artist
+        );
 
         assertThat(result)
-                .isEqualTo(expectedResponse);
-
-        verify(eventRepository)
-                .save(event);
+                .isEqualTo(
+                        expectedResponse
+                );
     }
-
-
-    // ---------------------------------------------------------
-    // BR-EVENT-010
-    // No asociar dos veces el mismo artista
-    // ---------------------------------------------------------
 
     @Test
     void shouldRejectDuplicatedArtistAssociation() {
 
-        Venue venue = activeVenue();
+        Venue venue =
+                activeVenue();
 
-        Event event = new Event(
-                "CMF-2026",
-                "Caribbean Music Fest 2026",
-                "Festival musical",
-                EventCategory.MUSIC,
-                EventStatus.DRAFT,
-                futureDate(),
-                18,
-                venue
+        Event event =
+                event(
+                        "CMF-2026",
+                        EventStatus.DRAFT,
+                        venue
+                );
+
+        Artist artist =
+                new Artist(
+                        "Solar Beat",
+                        "Colombia",
+                        "Electronic",
+                        true
+                );
+
+        event.addArtist(
+                artist
         );
-
-        Artist artist = new Artist(
-                "Solar Beat",
-                "Colombia",
-                "Electronic",
-                true
-        );
-
-        event.addArtist(artist);
 
         when(
                 eventRepository.findByEventCode(
@@ -597,7 +654,9 @@ class EventServiceImplTest {
         );
 
         when(
-                artistRepository.findById(1L)
+                artistRepository.findById(
+                        1L
+                )
         ).thenReturn(
                 Optional.of(artist)
         );
@@ -615,64 +674,42 @@ class EventServiceImplTest {
                         "already associated"
                 );
 
-        verify(eventRepository, never())
-                .save(any(Event.class));
+        verify(
+                eventRepository,
+                never()
+        ).save(
+                any(Event.class)
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // Consultar eventos PUBLISHED
-    // ---------------------------------------------------------
 
     @Test
     void shouldReturnPublishedEvents() {
 
-        Venue venue = activeVenue();
+        Venue venue =
+                activeVenue();
 
-        Event first = new Event(
-                "EVT-001",
-                "Evento Uno",
-                "Descripción",
-                EventCategory.MUSIC,
-                EventStatus.PUBLISHED,
-                futureDate(),
-                18,
-                venue
-        );
+        Event first =
+                event(
+                        "EVT-001",
+                        EventStatus.PUBLISHED,
+                        venue
+                );
 
-        Event second = new Event(
-                "EVT-002",
-                "Evento Dos",
-                "Descripción",
-                EventCategory.CULTURE,
-                EventStatus.PUBLISHED,
-                futureDate().plusDays(1),
-                0,
-                venue
-        );
+        Event second =
+                event(
+                        "EVT-002",
+                        EventStatus.PUBLISHED,
+                        venue
+                );
 
         EventSummaryResponse firstResponse =
-                new EventSummaryResponse(
-                        null,
-                        "EVT-001",
-                        "Evento Uno",
-                        EventCategory.MUSIC,
-                        EventStatus.PUBLISHED,
-                        first.getEventDate(),
-                        "VEN-SMR-01",
-                        "Marina Convention Center"
+                summary(
+                        first
                 );
 
         EventSummaryResponse secondResponse =
-                new EventSummaryResponse(
-                        null,
-                        "EVT-002",
-                        "Evento Dos",
-                        EventCategory.CULTURE,
-                        EventStatus.PUBLISHED,
-                        second.getEventDate(),
-                        "VEN-SMR-01",
-                        "Marina Convention Center"
+                summary(
+                        second
                 );
 
         when(
@@ -681,16 +718,27 @@ class EventServiceImplTest {
                                 EventStatus.PUBLISHED
                         )
         ).thenReturn(
-                List.of(first, second)
+                List.of(
+                        first,
+                        second
+                )
         );
 
         when(
-                eventMapper.toSummary(first)
-        ).thenReturn(firstResponse);
+                eventMapper.toSummary(
+                        first
+                )
+        ).thenReturn(
+                firstResponse
+        );
 
         when(
-                eventMapper.toSummary(second)
-        ).thenReturn(secondResponse);
+                eventMapper.toSummary(
+                        second
+                )
+        ).thenReturn(
+                secondResponse
+        );
 
         List<EventSummaryResponse> result =
                 eventService
@@ -701,44 +749,31 @@ class EventServiceImplTest {
                         firstResponse,
                         secondResponse
                 );
-
-        verify(eventRepository)
-                .findByStatusOrderByEventDateAsc(
-                        EventStatus.PUBLISHED
-                );
     }
 
-
-    // ---------------------------------------------------------
-    // Consultar eventos por artista
-    // ---------------------------------------------------------
-
     @Test
-    void shouldReturnEventsByArtist() {
+    void shouldReturnPublishedEventsByArtistForPublicAccess() {
 
-        Venue venue = activeVenue();
+        Venue venue =
+                activeVenue();
 
-        Event event = new Event(
-                "CMF-2026",
-                "Caribbean Music Fest 2026",
-                "Festival musical",
-                EventCategory.MUSIC,
-                EventStatus.PUBLISHED,
-                futureDate(),
-                18,
-                venue
-        );
-
-        EventSummaryResponse summary =
-                new EventSummaryResponse(
-                        null,
-                        "CMF-2026",
-                        "Caribbean Music Fest 2026",
-                        EventCategory.MUSIC,
+        Event published =
+                event(
+                        "PUB-001",
                         EventStatus.PUBLISHED,
-                        event.getEventDate(),
-                        "VEN-SMR-01",
-                        "Marina Convention Center"
+                        venue
+                );
+
+        Event draft =
+                event(
+                        "DRAFT-001",
+                        EventStatus.DRAFT,
+                        venue
+                );
+
+        EventSummaryResponse publishedResponse =
+                summary(
+                        published
                 );
 
         when(
@@ -746,12 +781,26 @@ class EventServiceImplTest {
                         "Solar Beat"
                 )
         ).thenReturn(
-                List.of(event)
+                List.of(
+                        published,
+                        draft
+                )
         );
 
         when(
-                eventMapper.toSummary(event)
-        ).thenReturn(summary);
+                authorizationService
+                        .canViewUnpublishedEvents()
+        ).thenReturn(
+                false
+        );
+
+        when(
+                eventMapper.toSummary(
+                        published
+                )
+        ).thenReturn(
+                publishedResponse
+        );
 
         List<EventSummaryResponse> result =
                 eventService.findByArtist(
@@ -759,18 +808,93 @@ class EventServiceImplTest {
                 );
 
         assertThat(result)
-                .containsExactly(summary);
-
-        verify(eventRepository)
-                .findByArtistStageName(
-                        "Solar Beat"
+                .containsExactly(
+                        publishedResponse
                 );
+
+        verify(
+                eventMapper,
+                never()
+        ).toSummary(
+                draft
+        );
     }
 
+    @Test
+    void shouldReturnAllArtistEventsForPrivilegedUser() {
 
-    // ---------------------------------------------------------
-    // Helpers
-    // ---------------------------------------------------------
+        Venue venue =
+                activeVenue();
+
+        Event published =
+                event(
+                        "PUB-001",
+                        EventStatus.PUBLISHED,
+                        venue
+                );
+
+        Event draft =
+                event(
+                        "DRAFT-001",
+                        EventStatus.DRAFT,
+                        venue
+                );
+
+        EventSummaryResponse publishedResponse =
+                summary(
+                        published
+                );
+
+        EventSummaryResponse draftResponse =
+                summary(
+                        draft
+                );
+
+        when(
+                eventRepository.findByArtistStageName(
+                        "Solar Beat"
+                )
+        ).thenReturn(
+                List.of(
+                        published,
+                        draft
+                )
+        );
+
+        when(
+                authorizationService
+                        .canViewUnpublishedEvents()
+        ).thenReturn(
+                true
+        );
+
+        when(
+                eventMapper.toSummary(
+                        published
+                )
+        ).thenReturn(
+                publishedResponse
+        );
+
+        when(
+                eventMapper.toSummary(
+                        draft
+                )
+        ).thenReturn(
+                draftResponse
+        );
+
+        List<EventSummaryResponse> result =
+                eventService.findByArtist(
+                        "Solar Beat"
+                );
+
+        assertThat(result)
+                .containsExactly(
+                        publishedResponse,
+                        draftResponse
+                );
+    }
 
     private Venue activeVenue() {
 
@@ -788,6 +912,24 @@ class EventServiceImplTest {
 
         return LocalDateTime.now()
                 .plusMonths(6);
+    }
+
+    private Event event(
+            String eventCode,
+            EventStatus status,
+            Venue venue
+    ) {
+
+        return new Event(
+                eventCode,
+                "Caribbean Music Fest 2026",
+                "Festival musical",
+                EventCategory.MUSIC,
+                status,
+                futureDate(),
+                18,
+                venue
+        );
     }
 
     private CreateEventRequest validCreateRequest() {
@@ -820,6 +962,22 @@ class EventServiceImplTest {
                 "VEN-SMR-01",
                 "Marina Convention Center",
                 List.of()
+        );
+    }
+
+    private EventSummaryResponse summary(
+            Event event
+    ) {
+
+        return new EventSummaryResponse(
+                null,
+                event.getEventCode(),
+                event.getName(),
+                event.getCategory(),
+                event.getStatus(),
+                event.getEventDate(),
+                event.getVenue().getCode(),
+                event.getVenue().getName()
         );
     }
 }

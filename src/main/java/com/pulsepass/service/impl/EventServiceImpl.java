@@ -4,22 +4,29 @@ import com.pulsepass.domain.Artist;
 import com.pulsepass.domain.Event;
 import com.pulsepass.domain.EventStatus;
 import com.pulsepass.domain.Venue;
+
 import com.pulsepass.dto.request.CreateEventRequest;
 import com.pulsepass.dto.response.EventResponse;
 import com.pulsepass.dto.response.EventSummaryResponse;
+
 import com.pulsepass.exception.BusinessRuleException;
 import com.pulsepass.exception.DuplicateResourceException;
 import com.pulsepass.exception.ResourceNotFoundException;
+
 import com.pulsepass.mapper.EventMapper;
+
 import com.pulsepass.repository.ArtistRepository;
 import com.pulsepass.repository.EventRepository;
 import com.pulsepass.repository.VenueRepository;
+
+import com.pulsepass.service.AuthorizationService;
 import com.pulsepass.service.EventService;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+
 import java.util.List;
 import java.util.Objects;
 
@@ -30,17 +37,29 @@ public class EventServiceImpl implements EventService {
     private final VenueRepository venueRepository;
     private final ArtistRepository artistRepository;
     private final EventMapper eventMapper;
+    private final AuthorizationService authorizationService;
 
     public EventServiceImpl(
             EventRepository eventRepository,
             VenueRepository venueRepository,
             ArtistRepository artistRepository,
-            EventMapper eventMapper
+            EventMapper eventMapper,
+            AuthorizationService authorizationService
     ) {
-        this.eventRepository = eventRepository;
-        this.venueRepository = venueRepository;
-        this.artistRepository = artistRepository;
-        this.eventMapper = eventMapper;
+        this.eventRepository =
+                eventRepository;
+
+        this.venueRepository =
+                venueRepository;
+
+        this.artistRepository =
+                artistRepository;
+
+        this.eventMapper =
+                eventMapper;
+
+        this.authorizationService =
+                authorizationService;
     }
 
     @Override
@@ -52,22 +71,27 @@ public class EventServiceImpl implements EventService {
         if (eventRepository.existsByEventCode(
                 request.eventCode()
         )) {
+
             throw new DuplicateResourceException(
                     "Event code already exists: "
                             + request.eventCode()
             );
         }
 
-        Venue venue = venueRepository
-                .findByCode(request.venueCode())
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Venue not found: "
-                                        + request.venueCode()
+        Venue venue =
+                venueRepository
+                        .findByCode(
+                                request.venueCode()
                         )
-                );
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "Venue not found: "
+                                                + request.venueCode()
+                                )
+                        );
 
         if (!venue.isActive()) {
+
             throw new BusinessRuleException(
                     "Venue is inactive: "
                             + venue.getCode()
@@ -76,7 +100,9 @@ public class EventServiceImpl implements EventService {
 
         if (request.eventDate() == null
                 || !request.eventDate()
-                .isAfter(LocalDateTime.now())) {
+                .isAfter(
+                        LocalDateTime.now()
+                )) {
 
             throw new BusinessRuleException(
                     "Event date must be in the future."
@@ -91,21 +117,26 @@ public class EventServiceImpl implements EventService {
             );
         }
 
-        Event event = new Event(
-                request.eventCode(),
-                request.name(),
-                request.description(),
-                request.category(),
-                EventStatus.DRAFT,
-                request.eventDate(),
-                request.minimumAge(),
-                venue
-        );
+        Event event =
+                new Event(
+                        request.eventCode(),
+                        request.name(),
+                        request.description(),
+                        request.category(),
+                        EventStatus.DRAFT,
+                        request.eventDate(),
+                        request.minimumAge(),
+                        venue
+                );
 
         Event savedEvent =
-                eventRepository.save(event);
+                eventRepository.save(
+                        event
+                );
 
-        return eventMapper.toResponse(savedEvent);
+        return eventMapper.toResponse(
+                savedEvent
+        );
     }
 
     @Override
@@ -114,9 +145,19 @@ public class EventServiceImpl implements EventService {
             String eventCode
     ) {
 
-        Event event = findEvent(eventCode);
+        Event event =
+                findEvent(
+                        eventCode
+                );
 
-        return eventMapper.toResponse(event);
+        authorizationService
+                .requireEventVisible(
+                        event
+                );
+
+        return eventMapper.toResponse(
+                event
+        );
     }
 
     @Override
@@ -128,7 +169,9 @@ public class EventServiceImpl implements EventService {
                         EventStatus.PUBLISHED
                 )
                 .stream()
-                .map(eventMapper::toSummary)
+                .map(
+                        eventMapper::toSummary
+                )
                 .toList();
     }
 
@@ -138,26 +181,36 @@ public class EventServiceImpl implements EventService {
             String eventCode
     ) {
 
-        Event event = findEvent(eventCode);
+        Event event =
+                findEvent(
+                        eventCode
+                );
 
-        if (event.getStatus() != EventStatus.DRAFT) {
+        if (event.getStatus()
+                != EventStatus.DRAFT) {
+
             throw new BusinessRuleException(
                     "Only DRAFT events can be published."
             );
         }
 
         if (!event.getEventDate()
-                .isAfter(LocalDateTime.now())) {
+                .isAfter(
+                        LocalDateTime.now()
+                )) {
 
             throw new BusinessRuleException(
                     "Event date must be in the future."
             );
         }
 
-        if (!event.getVenue().isActive()) {
+        if (!event.getVenue()
+                .isActive()) {
+
             throw new BusinessRuleException(
                     "Venue is inactive: "
-                            + event.getVenue().getCode()
+                            + event.getVenue()
+                            .getCode()
             );
         }
 
@@ -166,9 +219,13 @@ public class EventServiceImpl implements EventService {
         );
 
         Event savedEvent =
-                eventRepository.save(event);
+                eventRepository.save(
+                        event
+                );
 
-        return eventMapper.toResponse(savedEvent);
+        return eventMapper.toResponse(
+                savedEvent
+        );
     }
 
     @Override
@@ -178,16 +235,22 @@ public class EventServiceImpl implements EventService {
             Long artistId
     ) {
 
-        Event event = findEvent(eventCode);
-
-        Artist artist = artistRepository
-                .findById(artistId)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Artist not found: "
-                                        + artistId
-                        )
+        Event event =
+                findEvent(
+                        eventCode
                 );
+
+        Artist artist =
+                artistRepository
+                        .findById(
+                                artistId
+                        )
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "Artist not found: "
+                                                + artistId
+                                )
+                        );
 
         if (event.getStatus()
                 == EventStatus.CANCELLED
@@ -204,26 +267,34 @@ public class EventServiceImpl implements EventService {
         boolean alreadyAssociated =
                 event.getArtists()
                         .stream()
-                        .anyMatch(existingArtist ->
-                                Objects.equals(
-                                        existingArtist.getId(),
-                                        artist.getId()
-                                )
+                        .anyMatch(
+                                existingArtist ->
+                                        Objects.equals(
+                                                existingArtist.getId(),
+                                                artist.getId()
+                                        )
                         );
 
         if (alreadyAssociated) {
+
             throw new BusinessRuleException(
                     "Artist is already associated with event: "
                             + artist.getStageName()
             );
         }
 
-        event.addArtist(artist);
+        event.addArtist(
+                artist
+        );
 
         Event savedEvent =
-                eventRepository.save(event);
+                eventRepository.save(
+                        event
+                );
 
-        return eventMapper.toResponse(savedEvent);
+        return eventMapper.toResponse(
+                savedEvent
+        );
     }
 
     @Override
@@ -232,10 +303,35 @@ public class EventServiceImpl implements EventService {
             String stageName
     ) {
 
-        return eventRepository
-                .findByArtistStageName(stageName)
-                .stream()
-                .map(eventMapper::toSummary)
+        List<Event> events =
+                eventRepository
+                        .findByArtistStageName(
+                                stageName
+                        );
+
+        /*
+         * Anónimo y USER:
+         * solo eventos publicados.
+         *
+         * STAFF / ADMIN:
+         * pueden consultar también otros estados.
+         */
+        if (!authorizationService
+                .canViewUnpublishedEvents()) {
+
+            events =
+                    events.stream()
+                            .filter(event ->
+                                    event.getStatus()
+                                            == EventStatus.PUBLISHED
+                            )
+                            .toList();
+        }
+
+        return events.stream()
+                .map(
+                        eventMapper::toSummary
+                )
                 .toList();
     }
 
@@ -244,7 +340,9 @@ public class EventServiceImpl implements EventService {
     ) {
 
         return eventRepository
-                .findByEventCode(eventCode)
+                .findByEventCode(
+                        eventCode
+                )
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Event not found: "

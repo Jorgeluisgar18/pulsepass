@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.LocalDateTime;
+
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -120,6 +122,30 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(
+            AccessDeniedException.class
+    )
+    public ResponseEntity<ErrorResponse> handleAccessDenied(
+            AccessDeniedException ex
+    ) {
+
+        HttpStatus status =
+                HttpStatus.FORBIDDEN;
+
+        ErrorResponse error =
+                new ErrorResponse(
+                        LocalDateTime.now(),
+                        status.value(),
+                        status.getReasonPhrase(),
+                        "No tiene permisos para realizar esta operación",
+                        Map.of()
+                );
+
+        return ResponseEntity
+                .status(status)
+                .body(error);
+    }
+
+    @ExceptionHandler(
             MethodArgumentNotValidException.class
     )
     public ResponseEntity<ErrorResponse> handleValidation(
@@ -134,7 +160,8 @@ public class GlobalExceptionHandler {
                                 Collectors.toMap(
                                         FieldError::getField,
                                         FieldError::getDefaultMessage,
-                                        (first, second) -> first
+                                        (first, second) ->
+                                                first
                                 )
                         );
 
@@ -182,7 +209,9 @@ public class GlobalExceptionHandler {
                 .body(error);
     }
 
-    @ExceptionHandler(Exception.class)
+    @ExceptionHandler(
+            Exception.class
+    )
     public ResponseEntity<ErrorResponse> handleUnexpectedException(
             Exception ex
     ) {
