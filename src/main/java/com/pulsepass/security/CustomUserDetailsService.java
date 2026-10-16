@@ -8,6 +8,7 @@ import com.pulsepass.repository.UserRoleRepository;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +48,40 @@ public class CustomUserDetailsService
 
         UserCredential credential =
                 findCredential(identifier);
+
+        return buildPrincipal(
+                credential
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public SecurityPrincipal loadUserById(
+            Long userId
+    ) throws UsernameNotFoundException {
+
+        if (userId == null) {
+            throw new UsernameNotFoundException(
+                    "Invalid user"
+            );
+        }
+
+        UserCredential credential =
+                userCredentialRepository
+                        .findById(userId)
+                        .orElseThrow(() ->
+                                new UsernameNotFoundException(
+                                        "Invalid user"
+                                )
+                        );
+
+        return buildPrincipal(
+                credential
+        );
+    }
+
+    private SecurityPrincipal buildPrincipal(
+            UserCredential credential
+    ) {
 
         Long userId =
                 credential
