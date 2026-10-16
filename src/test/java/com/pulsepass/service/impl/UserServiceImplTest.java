@@ -274,7 +274,8 @@ class UserServiceImplTest {
                         "3001112233",
                         "Santa Marta",
                         LocalDate.now()
-                                .plusDays(1)
+                                .plusDays(1),
+                        "UnaFraseSeguraLarga2026!"
                 );
 
         when(
@@ -462,7 +463,8 @@ class UserServiceImplTest {
                         2000,
                         5,
                         10
-                )
+                ),
+                "UnaFraseSeguraLarga2026!"
         );
     }
 
