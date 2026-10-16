@@ -4,13 +4,19 @@ import com.pulsepass.domain.Role;
 import com.pulsepass.domain.User;
 import com.pulsepass.domain.UserCredential;
 import com.pulsepass.domain.UserRole;
+
 import com.pulsepass.dto.request.LoginRequest;
 import com.pulsepass.dto.request.RegisterUserRequest;
+
+import com.pulsepass.dto.response.AuthResponse;
 import com.pulsepass.dto.response.AuthenticatedUserResponse;
 import com.pulsepass.dto.response.UserResponse;
+
 import com.pulsepass.repository.UserCredentialRepository;
 import com.pulsepass.repository.UserRepository;
 import com.pulsepass.repository.UserRoleRepository;
+
+import com.pulsepass.security.JwtService;
 import com.pulsepass.security.SecurityPrincipal;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -24,8 +30,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDate;
@@ -61,6 +69,9 @@ class AuthServiceTest {
     @Mock
     private AuthenticationManager authenticationManager;
 
+    @Mock
+    private JwtService jwtService;
+
     private AuthService authService;
 
     @BeforeEach
@@ -73,7 +84,8 @@ class AuthServiceTest {
                         userCredentialRepository,
                         userRoleRepository,
                         passwordEncoder,
-                        authenticationManager
+                        authenticationManager,
+                        jwtService
                 );
     }
 
@@ -92,13 +104,15 @@ class AuthServiceTest {
         when(user.getId())
                 .thenReturn(1L);
 
-        when(userService.register(request))
-                .thenReturn(response);
+        when(
+                userService.register(request)
+        ).thenReturn(response);
 
-        when(userRepository.findById(1L))
-                .thenReturn(
-                        Optional.of(user)
-                );
+        when(
+                userRepository.findById(1L)
+        ).thenReturn(
+                Optional.of(user)
+        );
 
         when(
                 passwordEncoder.encode(
@@ -109,7 +123,9 @@ class AuthServiceTest {
         );
 
         UserResponse result =
-                authService.register(request);
+                authService.register(
+                        request
+                );
 
         ArgumentCaptor<UserCredential>
                 credentialCaptor =
@@ -155,7 +171,9 @@ class AuthServiceTest {
         );
 
         assertThat(role.getRole())
-                .isEqualTo(Role.USER);
+                .isEqualTo(
+                        Role.USER
+                );
 
         verify(passwordEncoder)
                 .encode(
@@ -167,10 +185,7 @@ class AuthServiceTest {
     void shouldAuthenticateValidCredentials() {
 
         LoginRequest request =
-                new LoginRequest(
-                        "andrea",
-                        "UnaFraseSeguraLarga2026!"
-                );
+                loginRequest();
 
         SecurityPrincipal principal =
                 securityPrincipal();
@@ -205,7 +220,73 @@ class AuthServiceTest {
     }
 
     @Test
-    void shouldRejectInvalidCredentials() {
+    void shouldLoginAndReturnBearerToken() {
+
+        LoginRequest request =
+                loginRequest();
+
+        SecurityPrincipal principal =
+                securityPrincipal();
+
+        Authentication authentication =
+                mock(Authentication.class);
+
+        when(
+                authentication.getPrincipal()
+        ).thenReturn(principal);
+
+        when(
+                authenticationManager.authenticate(
+                        any(Authentication.class)
+                )
+        ).thenReturn(authentication);
+
+        when(
+                jwtService.generateToken(
+                        principal
+                )
+        ).thenReturn(
+                "signed.jwt.token"
+        );
+
+        when(
+                jwtService
+                        .getAccessTokenTtlSeconds()
+        ).thenReturn(
+                900L
+        );
+
+        AuthResponse response =
+                authService.login(
+                        request
+                );
+
+        assertThat(
+                response.accessToken()
+        ).isEqualTo(
+                "signed.jwt.token"
+        );
+
+        assertThat(
+                response.tokenType()
+        ).isEqualTo(
+                "Bearer"
+        );
+
+        assertThat(
+                response.expiresIn()
+        ).isEqualTo(
+                900L
+        );
+
+        verify(jwtService)
+                .generateToken(
+                        principal
+                );
+    }
+
+    @Test
+    void shouldRejectInvalidCredentialsWithoutGeneratingToken() {
 
         LoginRequest request =
                 new LoginRequest(
@@ -224,7 +305,7 @@ class AuthServiceTest {
         );
 
         assertThatThrownBy(() ->
-                authService.authenticate(request)
+                authService.login(request)
         ).isInstanceOf(
                 BadCredentialsException.class
         );
@@ -241,19 +322,35 @@ class AuthServiceTest {
                         principal
                 );
 
-        assertThat(response.userId())
-                .isEqualTo(1L);
+        assertThat(
+                response.userId()
+        ).isEqualTo(1L);
 
-        assertThat(response.username())
-                .isEqualTo("andrea");
+        assertThat(
+                response.username()
+        ).isEqualTo(
+                "andrea"
+        );
 
-        assertThat(response.email())
-                .isEqualTo(
-                        "andrea@example.com"
-                );
+        assertThat(
+                response.email()
+        ).isEqualTo(
+                "andrea@example.com"
+        );
 
-        assertThat(response.roles())
-                .containsExactly("USER");
+        assertThat(
+                response.roles()
+        ).containsExactly(
+                "USER"
+        );
+    }
+
+    private LoginRequest loginRequest() {
+
+        return new LoginRequest(
+                "andrea",
+                "UnaFraseSeguraLarga2026!"
+        );
     }
 
     private RegisterUserRequest registerRequest() {

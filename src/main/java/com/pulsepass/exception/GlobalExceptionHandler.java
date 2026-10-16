@@ -5,7 +5,12 @@ import com.pulsepass.dto.response.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
+
 import org.springframework.validation.FieldError;
+
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -17,67 +22,106 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(ResourceNotFoundException.class)
+    @ExceptionHandler(
+            ResourceNotFoundException.class
+    )
     public ResponseEntity<ErrorResponse> handleResourceNotFound(
             ResourceNotFoundException ex
     ) {
 
-        HttpStatus status = HttpStatus.NOT_FOUND;
+        HttpStatus status =
+                HttpStatus.NOT_FOUND;
 
-        ErrorResponse error = new ErrorResponse(
-                LocalDateTime.now(),
-                status.value(),
-                status.getReasonPhrase(),
-                ex.getMessage(),
-                Map.of()
-        );
+        ErrorResponse error =
+                new ErrorResponse(
+                        LocalDateTime.now(),
+                        status.value(),
+                        status.getReasonPhrase(),
+                        ex.getMessage(),
+                        Map.of()
+                );
 
         return ResponseEntity
                 .status(status)
                 .body(error);
     }
 
-    @ExceptionHandler(DuplicateResourceException.class)
+    @ExceptionHandler(
+            DuplicateResourceException.class
+    )
     public ResponseEntity<ErrorResponse> handleDuplicateResource(
             DuplicateResourceException ex
     ) {
 
-        HttpStatus status = HttpStatus.CONFLICT;
+        HttpStatus status =
+                HttpStatus.CONFLICT;
 
-        ErrorResponse error = new ErrorResponse(
-                LocalDateTime.now(),
-                status.value(),
-                status.getReasonPhrase(),
-                ex.getMessage(),
-                Map.of()
-        );
+        ErrorResponse error =
+                new ErrorResponse(
+                        LocalDateTime.now(),
+                        status.value(),
+                        status.getReasonPhrase(),
+                        ex.getMessage(),
+                        Map.of()
+                );
 
         return ResponseEntity
                 .status(status)
                 .body(error);
     }
 
-    @ExceptionHandler(BusinessRuleException.class)
+    @ExceptionHandler(
+            BusinessRuleException.class
+    )
     public ResponseEntity<ErrorResponse> handleBusinessRule(
             BusinessRuleException ex
     ) {
 
-        HttpStatus status = HttpStatus.CONFLICT;
+        HttpStatus status =
+                HttpStatus.CONFLICT;
 
-        ErrorResponse error = new ErrorResponse(
-                LocalDateTime.now(),
-                status.value(),
-                status.getReasonPhrase(),
-                ex.getMessage(),
-                Map.of()
-        );
+        ErrorResponse error =
+                new ErrorResponse(
+                        LocalDateTime.now(),
+                        status.value(),
+                        status.getReasonPhrase(),
+                        ex.getMessage(),
+                        Map.of()
+                );
 
         return ResponseEntity
                 .status(status)
                 .body(error);
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ExceptionHandler({
+            BadCredentialsException.class,
+            DisabledException.class
+    })
+    public ResponseEntity<ErrorResponse> handleInvalidCredentials(
+            RuntimeException ex
+    ) {
+
+        HttpStatus status =
+                HttpStatus.UNAUTHORIZED;
+
+        ErrorResponse error =
+                new ErrorResponse(
+                        LocalDateTime.now(),
+                        status.value(),
+                        status.getReasonPhrase(),
+                        "Invalid credentials",
+                        Map.of()
+                );
+
+        return ResponseEntity
+                .status(status)
+                .body(error);
+    }
+
+    @ExceptionHandler(
+            MethodArgumentNotValidException.class
+    )
     public ResponseEntity<ErrorResponse> handleValidation(
             MethodArgumentNotValidException ex
     ) {
@@ -94,38 +138,44 @@ public class GlobalExceptionHandler {
                                 )
                         );
 
-        HttpStatus status = HttpStatus.BAD_REQUEST;
+        HttpStatus status =
+                HttpStatus.BAD_REQUEST;
 
-        ErrorResponse error = new ErrorResponse(
-                LocalDateTime.now(),
-                status.value(),
-                status.getReasonPhrase(),
-                "Validation failed",
-                details
-        );
+        ErrorResponse error =
+                new ErrorResponse(
+                        LocalDateTime.now(),
+                        status.value(),
+                        status.getReasonPhrase(),
+                        "Validation failed",
+                        details
+                );
 
         return ResponseEntity
                 .status(status)
                 .body(error);
     }
 
-    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ExceptionHandler(
+            HttpMessageNotReadableException.class
+    )
     public ResponseEntity<ErrorResponse> handleMalformedRequest(
             HttpMessageNotReadableException ex
     ) {
 
-        HttpStatus status = HttpStatus.BAD_REQUEST;
+        HttpStatus status =
+                HttpStatus.BAD_REQUEST;
 
-        ErrorResponse error = new ErrorResponse(
-                LocalDateTime.now(),
-                status.value(),
-                status.getReasonPhrase(),
-                "Malformed or invalid JSON request",
-                Map.of(
-                        "body",
-                        "Check JSON syntax and enum values"
-                )
-        );
+        ErrorResponse error =
+                new ErrorResponse(
+                        LocalDateTime.now(),
+                        status.value(),
+                        status.getReasonPhrase(),
+                        "Malformed or invalid JSON request",
+                        Map.of(
+                                "body",
+                                "Check JSON syntax and enum values"
+                        )
+                );
 
         return ResponseEntity
                 .status(status)
@@ -140,13 +190,14 @@ public class GlobalExceptionHandler {
         HttpStatus status =
                 HttpStatus.INTERNAL_SERVER_ERROR;
 
-        ErrorResponse error = new ErrorResponse(
-                LocalDateTime.now(),
-                status.value(),
-                status.getReasonPhrase(),
-                "An unexpected error occurred",
-                Map.of()
-        );
+        ErrorResponse error =
+                new ErrorResponse(
+                        LocalDateTime.now(),
+                        status.value(),
+                        status.getReasonPhrase(),
+                        "An unexpected error occurred",
+                        Map.of()
+                );
 
         return ResponseEntity
                 .status(status)

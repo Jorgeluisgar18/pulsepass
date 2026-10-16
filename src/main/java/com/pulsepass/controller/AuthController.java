@@ -1,13 +1,22 @@
 package com.pulsepass.controller;
 
+import com.pulsepass.dto.request.LoginRequest;
+
+import com.pulsepass.dto.response.AuthResponse;
 import com.pulsepass.dto.response.AuthenticatedUserResponse;
+
 import com.pulsepass.security.SecurityPrincipal;
 import com.pulsepass.service.AuthService;
 
+import jakarta.validation.Valid;
+
 import org.springframework.http.ResponseEntity;
+
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -20,7 +29,20 @@ public class AuthController {
     public AuthController(
             AuthService authService
     ) {
-        this.authService = authService;
+        this.authService =
+                authService;
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<AuthResponse> login(
+            @Valid
+            @RequestBody
+            LoginRequest request
+    ) {
+
+        return ResponseEntity.ok(
+                authService.login(request)
+        );
     }
 
     @GetMapping("/me")
@@ -30,7 +52,9 @@ public class AuthController {
     ) {
 
         return ResponseEntity.ok(
-                authService.currentUser(principal)
+                authService.currentUser(
+                        principal
+                )
         );
     }
 }
