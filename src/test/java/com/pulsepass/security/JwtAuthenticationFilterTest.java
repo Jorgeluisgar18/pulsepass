@@ -17,9 +17,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
 
@@ -291,6 +292,118 @@ class JwtAuthenticationFilterTest {
                         .getContext()
                         .getAuthentication()
         ).isNull();
+    }
+
+    @Test
+    void shouldRejectMultipleAuthorizationHeaders()
+            throws Exception {
+
+        MockHttpServletRequest request =
+                new MockHttpServletRequest();
+
+        request.addHeader(
+                HttpHeaders.AUTHORIZATION,
+                "Bearer first-token"
+        );
+
+        request.addHeader(
+                HttpHeaders.AUTHORIZATION,
+                "Bearer second-token"
+        );
+
+        MockHttpServletResponse response =
+                new MockHttpServletResponse();
+
+        filter.doFilter(
+                request,
+                response,
+                filterChain
+        );
+
+        verify(
+                filterChain,
+                never()
+        ).doFilter(
+                request,
+                response
+        );
+
+        verify(authenticationEntryPoint)
+                .commence(
+                        any(),
+                        any(),
+                        any()
+                );
+
+        verifyNoInteractions(
+                jwtService,
+                userDetailsService
+        );
+
+        assertThat(
+                SecurityContextHolder
+                        .getContext()
+                        .getAuthentication()
+        ).isNull();
+    }
+
+    @Test
+    void shouldNotOverwriteExistingAuthentication()
+            throws Exception {
+
+        MockHttpServletRequest request =
+                new MockHttpServletRequest();
+
+        request.addHeader(
+                HttpHeaders.AUTHORIZATION,
+                "Bearer another-token"
+        );
+
+        MockHttpServletResponse response =
+                new MockHttpServletResponse();
+
+        Authentication existingAuthentication =
+                new UsernamePasswordAuthenticationToken(
+                        "existing-user",
+                        null,
+                        List.of(
+                                new SimpleGrantedAuthority(
+                                        "ROLE_ADMIN"
+                                )
+                        )
+                );
+
+        SecurityContextHolder
+                .getContext()
+                .setAuthentication(
+                        existingAuthentication
+                );
+
+        filter.doFilter(
+                request,
+                response,
+                filterChain
+        );
+
+        verify(filterChain)
+                .doFilter(
+                        request,
+                        response
+                );
+
+        verifyNoInteractions(
+                jwtService,
+                userDetailsService,
+                authenticationEntryPoint
+        );
+
+        assertThat(
+                SecurityContextHolder
+                        .getContext()
+                        .getAuthentication()
+        ).isSameAs(
+                existingAuthentication
+        );
     }
 
     private SecurityPrincipal activePrincipal() {

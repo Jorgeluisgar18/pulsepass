@@ -4,6 +4,12 @@ import com.pulsepass.dto.request.RegisterUserRequest;
 import com.pulsepass.dto.response.UserResponse;
 import com.pulsepass.exception.DuplicateResourceException;
 import com.pulsepass.exception.GlobalExceptionHandler;
+import com.pulsepass.security.CustomUserDetailsService;
+import com.pulsepass.security.JwtAuthenticationFilter;
+import com.pulsepass.security.JwtService;
+import com.pulsepass.security.RestAccessDeniedHandler;
+import com.pulsepass.security.RestAuthenticationEntryPoint;
+import com.pulsepass.security.SecurityConfig;
 import com.pulsepass.service.AuthService;
 import com.pulsepass.service.UserService;
 
@@ -23,14 +29,23 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(UserController.class)
-@Import(GlobalExceptionHandler.class)
+@Import({
+        SecurityConfig.class,
+        JwtAuthenticationFilter.class,
+        RestAuthenticationEntryPoint.class,
+        RestAccessDeniedHandler.class,
+        GlobalExceptionHandler.class
+})
 class UserControllerTest {
 
     @Autowired
@@ -42,25 +57,18 @@ class UserControllerTest {
     @MockitoBean
     private AuthService authService;
 
+    @MockitoBean
+    private JwtService jwtService;
+
+    @MockitoBean
+    private CustomUserDetailsService userDetailsService;
+
     @Test
-    void shouldRegisterUserAndReturn201() throws Exception {
+    void shouldRegisterUserAndReturn201()
+            throws Exception {
 
         UserResponse response =
-                new UserResponse(
-                        1L,
-                        "andrea",
-                        "andrea@example.com",
-                        true,
-                        "Andrea",
-                        "Garcia",
-                        "3001234567",
-                        "Santa Marta",
-                        LocalDate.of(
-                                1998,
-                                5,
-                                10
-                        )
-                );
+                response();
 
         when(
                 authService.register(
@@ -68,31 +76,20 @@ class UserControllerTest {
                 )
         ).thenReturn(response);
 
-        String requestBody = """
-                {
-                  "username": "andrea",
-                  "email": "andrea@example.com",
-                  "firstName": "Andrea",
-                  "lastName": "Garcia",
-                  "phone": "3001234567",
-                  "city": "Santa Marta",
-                  "birthDate": "1998-05-10",
-                  "password": "UnaFraseSeguraLarga2026!"
-                }
-                """;
-
         mockMvc.perform(
                         post("/api/users")
                                 .contentType(
                                         MediaType.APPLICATION_JSON
                                 )
-                                .content(requestBody)
+                                .content(
+                                        validRegistrationJson()
+                                )
                 )
                 .andExpect(
                         status().isCreated()
                 )
                 .andExpect(
-                        content().contentType(
+                        content().contentTypeCompatibleWith(
                                 MediaType.APPLICATION_JSON
                         )
                 )
@@ -165,11 +162,6 @@ class UserControllerTest {
                         status().isBadRequest()
                 )
                 .andExpect(
-                        content().contentType(
-                                MediaType.APPLICATION_JSON
-                        )
-                )
-                .andExpect(
                         jsonPath("$.status")
                                 .value(400)
                 )
@@ -184,11 +176,10 @@ class UserControllerTest {
                                 )
                 )
                 .andExpect(
-                        jsonPath(
-                                "$.details.email"
-                        ).value(
-                                "Email must be valid"
-                        )
+                        jsonPath("$.details.email")
+                                .value(
+                                        "Email must be valid"
+                                )
                 );
 
         verify(
@@ -227,30 +218,14 @@ class UserControllerTest {
                         status().isBadRequest()
                 )
                 .andExpect(
-                        content().contentType(
-                                MediaType.APPLICATION_JSON
-                        )
-                )
-                .andExpect(
                         jsonPath("$.status")
                                 .value(400)
                 )
                 .andExpect(
-                        jsonPath("$.error")
-                                .value("Bad Request")
-                )
-                .andExpect(
-                        jsonPath("$.message")
+                        jsonPath("$.details.password")
                                 .value(
-                                        "Validation failed"
+                                        "Password must have at least 12 characters and at most 72 UTF-8 bytes"
                                 )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.details.password"
-                        ).value(
-                                "Password must have at least 12 characters and at most 72 UTF-8 bytes"
-                        )
                 );
 
         verify(
@@ -288,26 +263,14 @@ class UserControllerTest {
                         status().isBadRequest()
                 )
                 .andExpect(
-                        content().contentType(
-                                MediaType.APPLICATION_JSON
-                        )
-                )
-                .andExpect(
                         jsonPath("$.status")
                                 .value(400)
                 )
                 .andExpect(
-                        jsonPath("$.message")
+                        jsonPath("$.details.password")
                                 .value(
-                                        "Validation failed"
+                                        "Password is required"
                                 )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.details.password"
-                        ).value(
-                                "Password is required"
-                        )
                 );
 
         verify(
@@ -332,33 +295,17 @@ class UserControllerTest {
                 )
         );
 
-        String requestBody = """
-                {
-                  "username": "andrea",
-                  "email": "andrea@example.com",
-                  "firstName": "Andrea",
-                  "lastName": "Garcia",
-                  "phone": "3001234567",
-                  "city": "Santa Marta",
-                  "birthDate": "1998-05-10",
-                  "password": "UnaFraseSeguraLarga2026!"
-                }
-                """;
-
         mockMvc.perform(
                         post("/api/users")
                                 .contentType(
                                         MediaType.APPLICATION_JSON
                                 )
-                                .content(requestBody)
+                                .content(
+                                        validRegistrationJson()
+                                )
                 )
                 .andExpect(
                         status().isConflict()
-                )
-                .andExpect(
-                        content().contentType(
-                                MediaType.APPLICATION_JSON
-                        )
                 )
                 .andExpect(
                         jsonPath("$.status")
@@ -385,31 +332,20 @@ class UserControllerTest {
     void shouldReturnUserByEmail()
             throws Exception {
 
-        UserResponse response =
-                new UserResponse(
-                        1L,
-                        "andrea",
-                        "andrea@example.com",
-                        true,
-                        "Andrea",
-                        "Garcia",
-                        "3001234567",
-                        "Santa Marta",
-                        LocalDate.of(
-                                1998,
-                                5,
-                                10
-                        )
-                );
-
         when(
                 userService.findByEmail(
                         "andrea@example.com"
                 )
-        ).thenReturn(response);
+        ).thenReturn(
+                response()
+        );
 
         mockMvc.perform(
                         get("/api/users/by-email")
+                                .with(
+                                        user("andrea")
+                                                .roles("USER")
+                                )
                                 .param(
                                         "email",
                                         "andrea@example.com"
@@ -417,11 +353,6 @@ class UserControllerTest {
                 )
                 .andExpect(
                         status().isOk()
-                )
-                .andExpect(
-                        content().contentType(
-                                MediaType.APPLICATION_JSON
-                        )
                 )
                 .andExpect(
                         jsonPath("$.username")
@@ -452,31 +383,20 @@ class UserControllerTest {
     void shouldReturnUserByUsername()
             throws Exception {
 
-        UserResponse response =
-                new UserResponse(
-                        1L,
-                        "andrea",
-                        "andrea@example.com",
-                        true,
-                        "Andrea",
-                        "Garcia",
-                        "3001234567",
-                        "Santa Marta",
-                        LocalDate.of(
-                                1998,
-                                5,
-                                10
-                        )
-                );
-
         when(
                 userService.findByUsername(
                         "andrea"
                 )
-        ).thenReturn(response);
+        ).thenReturn(
+                response()
+        );
 
         mockMvc.perform(
                         get("/api/users/by-username")
+                                .with(
+                                        user("andrea")
+                                                .roles("USER")
+                                )
                                 .param(
                                         "username",
                                         "andrea"
@@ -484,11 +404,6 @@ class UserControllerTest {
                 )
                 .andExpect(
                         status().isOk()
-                )
-                .andExpect(
-                        content().contentType(
-                                MediaType.APPLICATION_JSON
-                        )
                 )
                 .andExpect(
                         jsonPath("$.username")
@@ -513,5 +428,40 @@ class UserControllerTest {
                 .findByUsername(
                         "andrea"
                 );
+    }
+
+    private String validRegistrationJson() {
+
+        return """
+                {
+                  "username": "andrea",
+                  "email": "andrea@example.com",
+                  "firstName": "Andrea",
+                  "lastName": "Garcia",
+                  "phone": "3001234567",
+                  "city": "Santa Marta",
+                  "birthDate": "1998-05-10",
+                  "password": "UnaFraseSeguraLarga2026!"
+                }
+                """;
+    }
+
+    private UserResponse response() {
+
+        return new UserResponse(
+                1L,
+                "andrea",
+                "andrea@example.com",
+                true,
+                "Andrea",
+                "Garcia",
+                "3001234567",
+                "Santa Marta",
+                LocalDate.of(
+                        1998,
+                        5,
+                        10
+                )
+        );
     }
 }

@@ -2,3 +2,5 @@ target/
 .idea/
 .atl/
 *.iml
+
+.env

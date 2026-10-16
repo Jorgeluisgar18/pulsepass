@@ -11,12 +11,12 @@ import org.springframework.http.HttpHeaders;
 
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
-
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 
@@ -25,6 +25,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
 
 @Component
 public class JwtAuthenticationFilter
@@ -59,10 +61,54 @@ public class JwtAuthenticationFilter
             FilterChain filterChain
     ) throws ServletException, IOException {
 
-        String authorizationHeader =
-                request.getHeader(
-                        HttpHeaders.AUTHORIZATION
+        Authentication existingAuthentication =
+                SecurityContextHolder
+                        .getContext()
+                        .getAuthentication();
+
+        if (existingAuthentication != null
+                && existingAuthentication.isAuthenticated()) {
+
+            filterChain.doFilter(
+                    request,
+                    response
+            );
+
+            return;
+        }
+
+        List<String> authorizationHeaders =
+                Collections.list(
+                        request.getHeaders(
+                                HttpHeaders.AUTHORIZATION
+                        )
                 );
+
+        if (authorizationHeaders.size() > 1) {
+
+            rejectUnauthorized(
+                    request,
+                    response,
+                    new BadCredentialsException(
+                            "Multiple Authorization headers are not allowed"
+                    )
+            );
+
+            return;
+        }
+
+        if (authorizationHeaders.isEmpty()) {
+
+            filterChain.doFilter(
+                    request,
+                    response
+            );
+
+            return;
+        }
+
+        String authorizationHeader =
+                authorizationHeaders.getFirst();
 
         if (authorizationHeader == null
                 || authorizationHeader.isBlank()) {
@@ -147,10 +193,7 @@ public class JwtAuthenticationFilter
                 | IllegalArgumentException ex
         ) {
 
-            SecurityContextHolder
-                    .clearContext();
-
-            authenticationEntryPoint.commence(
+            rejectUnauthorized(
                     request,
                     response,
                     new BadCredentialsException(
@@ -163,14 +206,27 @@ public class JwtAuthenticationFilter
                 AuthenticationException ex
         ) {
 
-            SecurityContextHolder
-                    .clearContext();
-
-            authenticationEntryPoint.commence(
+            rejectUnauthorized(
                     request,
                     response,
                     ex
             );
         }
+    }
+
+    private void rejectUnauthorized(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            AuthenticationException exception
+    ) throws IOException, ServletException {
+
+        SecurityContextHolder
+                .clearContext();
+
+        authenticationEntryPoint.commence(
+                request,
+                response,
+                exception
+        );
     }
 }
