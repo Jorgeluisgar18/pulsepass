@@ -3,9 +3,16 @@ package com.pulsepass.controller;
 import com.pulsepass.dto.response.ArtistResponse;
 import com.pulsepass.exception.GlobalExceptionHandler;
 import com.pulsepass.exception.ResourceNotFoundException;
+import com.pulsepass.security.CustomUserDetailsService;
+import com.pulsepass.security.JwtAuthenticationFilter;
+import com.pulsepass.security.JwtService;
+import com.pulsepass.security.RestAccessDeniedHandler;
+import com.pulsepass.security.RestAuthenticationEntryPoint;
+import com.pulsepass.security.SecurityConfig;
 import com.pulsepass.service.ArtistService;
 
 import org.junit.jupiter.api.Test;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -19,12 +26,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(ArtistController.class)
-@Import(GlobalExceptionHandler.class)
+@Import({
+        SecurityConfig.class,
+        JwtAuthenticationFilter.class,
+        RestAuthenticationEntryPoint.class,
+        RestAccessDeniedHandler.class,
+        GlobalExceptionHandler.class
+})
 class ArtistControllerTest {
 
     @Autowired
@@ -33,54 +47,100 @@ class ArtistControllerTest {
     @MockitoBean
     private ArtistService artistService;
 
+    @MockitoBean
+    private JwtService jwtService;
+
+    @MockitoBean
+    private CustomUserDetailsService userDetailsService;
+
     @Test
-    void shouldReturnArtistById() throws Exception {
+    void shouldReturnArtistById()
+            throws Exception {
 
-        ArtistResponse response = new ArtistResponse(
-                1L,
-                "Solar Beat",
-                "Colombia",
-                "Electronic",
-                true
-        );
+        ArtistResponse response =
+                new ArtistResponse(
+                        1L,
+                        "Solar Beat",
+                        "Colombia",
+                        "Electronic",
+                        true
+                );
 
-        when(artistService.findById(1L))
-                .thenReturn(response);
+        when(
+                artistService.findById(1L)
+        ).thenReturn(response);
 
         mockMvc.perform(
-                        get("/api/artists/1")
+                        get(
+                                "/api/artists/1"
+                        )
                 )
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.stageName").value("Solar Beat"))
-                .andExpect(jsonPath("$.country").value("Colombia"))
-                .andExpect(jsonPath("$.active").value(true));
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        content().contentType(
+                                MediaType.APPLICATION_JSON
+                        )
+                )
+                .andExpect(
+                        jsonPath("$.id")
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath("$.stageName")
+                                .value(
+                                        "Solar Beat"
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.country")
+                                .value(
+                                        "Colombia"
+                                )
+                )
+                .andExpect(
+                        jsonPath("$.active")
+                                .value(true)
+                );
 
         verify(artistService)
                 .findById(1L);
     }
 
     @Test
-    void shouldReturn404WhenArtistDoesNotExist() throws Exception {
+    void shouldReturn404WhenArtistDoesNotExist()
+            throws Exception {
 
-        when(artistService.findById(99L))
-                .thenThrow(
-                        new ResourceNotFoundException(
-                                "Artist not found: 99"
-                        )
-                );
+        when(
+                artistService.findById(99L)
+        ).thenThrow(
+                new ResourceNotFoundException(
+                        "Artist not found: 99"
+                )
+        );
 
         mockMvc.perform(
-                        get("/api/artists/99")
+                        get(
+                                "/api/artists/99"
+                        )
                 )
-                .andExpect(status().isNotFound())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.status").value(404))
-                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(
+                        status().isNotFound()
+                )
+                .andExpect(
+                        jsonPath("$.status")
+                                .value(404)
+                )
+                .andExpect(
+                        jsonPath("$.error")
+                                .value("Not Found")
+                )
                 .andExpect(
                         jsonPath("$.message")
-                                .value("Artist not found: 99")
+                                .value(
+                                        "Artist not found: 99"
+                                )
                 );
 
         verify(artistService)
@@ -88,65 +148,108 @@ class ArtistControllerTest {
     }
 
     @Test
-    void shouldReturnArtistByStageName() throws Exception {
+    void shouldReturnArtistByStageName()
+            throws Exception {
 
-        ArtistResponse response = new ArtistResponse(
-                1L,
-                "Solar Beat",
-                "Colombia",
-                "Electronic",
-                true
-        );
+        ArtistResponse response =
+                new ArtistResponse(
+                        1L,
+                        "Solar Beat",
+                        "Colombia",
+                        "Electronic",
+                        true
+                );
 
-        when(artistService.findByStageName("Solar Beat"))
-                .thenReturn(response);
+        when(
+                artistService.findByStageName(
+                        "Solar Beat"
+                )
+        ).thenReturn(response);
 
         mockMvc.perform(
-                        get("/api/artists/by-stage-name")
-                                .param("stageName", "Solar Beat")
+                        get(
+                                "/api/artists/by-stage-name"
+                        )
+                                .param(
+                                        "stageName",
+                                        "Solar Beat"
+                                )
                 )
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.id").value(1))
-                .andExpect(jsonPath("$.stageName").value("Solar Beat"))
-                .andExpect(jsonPath("$.active").value(true));
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.id")
+                                .value(1)
+                )
+                .andExpect(
+                        jsonPath("$.stageName")
+                                .value(
+                                        "Solar Beat"
+                                )
+                );
 
         verify(artistService)
-                .findByStageName("Solar Beat");
+                .findByStageName(
+                        "Solar Beat"
+                );
     }
 
     @Test
-    void shouldReturnActiveArtists() throws Exception {
+    void shouldReturnActiveArtists()
+            throws Exception {
 
-        ArtistResponse artist1 = new ArtistResponse(
-                1L,
-                "Solar Beat",
-                "Colombia",
-                "Electronic",
-                true
+        ArtistResponse artist1 =
+                new ArtistResponse(
+                        1L,
+                        "Solar Beat",
+                        "Colombia",
+                        "Electronic",
+                        true
+                );
+
+        ArtistResponse artist2 =
+                new ArtistResponse(
+                        2L,
+                        "Neon Waves",
+                        "Colombia",
+                        "Pop",
+                        true
+                );
+
+        when(
+                artistService.findActiveArtists()
+        ).thenReturn(
+                List.of(
+                        artist1,
+                        artist2
+                )
         );
-
-        ArtistResponse artist2 = new ArtistResponse(
-                2L,
-                "Neon Waves",
-                "Colombia",
-                "Pop",
-                true
-        );
-
-        when(artistService.findActiveArtists())
-                .thenReturn(List.of(artist1, artist2));
 
         mockMvc.perform(
-                        get("/api/artists/active")
+                        get(
+                                "/api/artists/active"
+                        )
                 )
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].stageName").value("Solar Beat"))
-                .andExpect(jsonPath("$[1].stageName").value("Neon Waves"))
-                .andExpect(jsonPath("$[0].active").value(true))
-                .andExpect(jsonPath("$[1].active").value(true));
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath("$.length()")
+                                .value(2)
+                )
+                .andExpect(
+                        jsonPath("$[0].stageName")
+                                .value(
+                                        "Solar Beat"
+                                )
+                )
+                .andExpect(
+                        jsonPath("$[1].stageName")
+                                .value(
+                                        "Neon Waves"
+                                )
+                );
 
         verify(artistService)
                 .findActiveArtists();

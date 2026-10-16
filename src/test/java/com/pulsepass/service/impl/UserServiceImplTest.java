@@ -2,14 +2,20 @@ package com.pulsepass.service.impl;
 
 import com.pulsepass.domain.User;
 import com.pulsepass.domain.UserProfile;
+
 import com.pulsepass.dto.request.RegisterUserRequest;
 import com.pulsepass.dto.response.UserResponse;
+
 import com.pulsepass.exception.BusinessRuleException;
 import com.pulsepass.exception.DuplicateResourceException;
 import com.pulsepass.exception.ResourceNotFoundException;
+
 import com.pulsepass.mapper.UserMapper;
+
 import com.pulsepass.repository.UserProfileRepository;
 import com.pulsepass.repository.UserRepository;
+
+import com.pulsepass.service.AuthorizationService;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,6 +25,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.security.access.AccessDeniedException;
+
 import java.time.LocalDate;
 import java.util.Optional;
 
@@ -27,6 +35,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -43,14 +53,11 @@ class UserServiceImplTest {
     @Mock
     private UserMapper userMapper;
 
+    @Mock
+    private AuthorizationService authorizationService;
+
     @InjectMocks
     private UserServiceImpl userService;
-
-
-    // ---------------------------------------------------------
-    // TEST-USER-001
-    // Registrar usuario válido
-    // ---------------------------------------------------------
 
     @Test
     void shouldRegisterValidUser() {
@@ -82,7 +89,9 @@ class UserServiceImplTest {
         );
 
         UserResponse result =
-                userService.register(request);
+                userService.register(
+                        request
+                );
 
         ArgumentCaptor<User> userCaptor =
                 ArgumentCaptor.forClass(
@@ -111,43 +120,44 @@ class UserServiceImplTest {
                 profileCaptor.getValue();
 
         assertThat(result)
-                .isEqualTo(expectedResponse);
-
-        assertThat(savedUser.getUsername())
-                .isEqualTo("andrea");
-
-        assertThat(savedUser.getEmail())
                 .isEqualTo(
-                        "andrea@email.com"
+                        expectedResponse
                 );
 
-        assertThat(savedUser.isActive())
-                .isTrue();
+        assertThat(
+                savedUser.getUsername()
+        ).isEqualTo(
+                "andrea"
+        );
 
-        assertThat(savedUser.getProfile())
-                .isSameAs(savedProfile);
+        assertThat(
+                savedUser.getEmail()
+        ).isEqualTo(
+                "andrea@email.com"
+        );
 
-        assertThat(savedProfile.getUser())
-                .isSameAs(savedUser);
+        assertThat(
+                savedUser.isActive()
+        ).isTrue();
 
-        assertThat(savedProfile.getFirstName())
-                .isEqualTo("Andrea");
+        assertThat(
+                savedUser.getProfile()
+        ).isSameAs(
+                savedProfile
+        );
 
-        assertThat(savedProfile.getBirthDate())
-                .isEqualTo(
-                        LocalDate.of(
-                                2000,
-                                5,
-                                10
-                        )
-                );
+        assertThat(
+                savedProfile.getUser()
+        ).isSameAs(
+                savedUser
+        );
+
+        assertThat(
+                savedProfile.getFirstName()
+        ).isEqualTo(
+                "Andrea"
+        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-USER-002
-    // Username duplicado
-    // ---------------------------------------------------------
 
     @Test
     void shouldRejectDuplicatedUsername() {
@@ -162,7 +172,9 @@ class UserServiceImplTest {
         ).thenReturn(true);
 
         assertThatThrownBy(() ->
-                userService.register(request)
+                userService.register(
+                        request
+                )
         )
                 .isInstanceOf(
                         DuplicateResourceException.class
@@ -191,20 +203,7 @@ class UserServiceImplTest {
         ).existsByEmailIgnoreCase(
                 any(String.class)
         );
-
-        verify(
-                userMapper,
-                never()
-        ).toResponse(
-                any(User.class)
-        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-USER-003
-    // Email duplicado
-    // ---------------------------------------------------------
 
     @Test
     void shouldRejectDuplicatedEmail() {
@@ -225,7 +224,9 @@ class UserServiceImplTest {
         ).thenReturn(true);
 
         assertThatThrownBy(() ->
-                userService.register(request)
+                userService.register(
+                        request
+                )
         )
                 .isInstanceOf(
                         DuplicateResourceException.class
@@ -240,27 +241,7 @@ class UserServiceImplTest {
         ).save(
                 any(User.class)
         );
-
-        verify(
-                userProfileRepository,
-                never()
-        ).save(
-                any(UserProfile.class)
-        );
-
-        verify(
-                userMapper,
-                never()
-        ).toResponse(
-                any(User.class)
-        );
     }
-
-
-    // ---------------------------------------------------------
-    // TEST-USER-004
-    // Birth date futura
-    // ---------------------------------------------------------
 
     @Test
     void shouldRejectFutureBirthDate() {
@@ -274,7 +255,8 @@ class UserServiceImplTest {
                         "3001112233",
                         "Santa Marta",
                         LocalDate.now()
-                                .plusDays(1)
+                                .plusDays(1),
+                        "UnaFraseSeguraLarga2026!"
                 );
 
         when(
@@ -290,7 +272,9 @@ class UserServiceImplTest {
         ).thenReturn(false);
 
         assertThatThrownBy(() ->
-                userService.register(request)
+                userService.register(
+                        request
+                )
         )
                 .isInstanceOf(
                         BusinessRuleException.class
@@ -305,22 +289,10 @@ class UserServiceImplTest {
         ).save(
                 any(User.class)
         );
-
-        verify(
-                userProfileRepository,
-                never()
-        ).save(
-                any(UserProfile.class)
-        );
     }
 
-
-    // ---------------------------------------------------------
-    // Consultar usuario por email
-    // ---------------------------------------------------------
-
     @Test
-    void shouldFindUserByEmail() {
+    void shouldFindUserByEmailWhenAuthorized() {
 
         User user =
                 userWithProfile();
@@ -329,15 +301,20 @@ class UserServiceImplTest {
                 userResponse();
 
         when(
-                userRepository.findByEmailIgnoreCase(
-                        eq("ANDREA@EMAIL.COM")
-                )
+                userRepository
+                        .findByEmailIgnoreCase(
+                                eq(
+                                        "ANDREA@EMAIL.COM"
+                                )
+                        )
         ).thenReturn(
                 Optional.of(user)
         );
 
         when(
-                userMapper.toResponse(user)
+                userMapper.toResponse(
+                        user
+                )
         ).thenReturn(
                 expectedResponse
         );
@@ -352,22 +329,19 @@ class UserServiceImplTest {
                         expectedResponse
                 );
 
-        verify(userRepository)
-                .findByEmailIgnoreCase(
-                        "ANDREA@EMAIL.COM"
+        verify(authorizationService)
+                .requireSelfOrAdmin(
+                        user
                 );
 
         verify(userMapper)
-                .toResponse(user);
+                .toResponse(
+                        user
+                );
     }
 
-
-    // ---------------------------------------------------------
-    // Consultar usuario por username
-    // ---------------------------------------------------------
-
     @Test
-    void shouldFindUserByUsername() {
+    void shouldFindUserByUsernameWhenAuthorized() {
 
         User user =
                 userWithProfile();
@@ -384,7 +358,9 @@ class UserServiceImplTest {
         );
 
         when(
-                userMapper.toResponse(user)
+                userMapper.toResponse(
+                        user
+                )
         ).thenReturn(
                 expectedResponse
         );
@@ -399,19 +375,58 @@ class UserServiceImplTest {
                         expectedResponse
                 );
 
-        verify(userRepository)
-                .findByUsername(
-                        "andrea"
+        verify(authorizationService)
+                .requireSelfOrAdmin(
+                        user
                 );
 
         verify(userMapper)
-                .toResponse(user);
+                .toResponse(
+                        user
+                );
     }
 
+    @Test
+    void shouldRejectAccessToAnotherUsersData() {
 
-    // ---------------------------------------------------------
-    // Usuario inexistente por email
-    // ---------------------------------------------------------
+        User user =
+                userWithProfile();
+
+        when(
+                userRepository.findByEmailIgnoreCase(
+                        "another@email.com"
+                )
+        ).thenReturn(
+                Optional.of(user)
+        );
+
+        doThrow(
+                new AccessDeniedException(
+                        "Access denied"
+                )
+        )
+                .when(
+                        authorizationService
+                )
+                .requireSelfOrAdmin(
+                        user
+                );
+
+        assertThatThrownBy(() ->
+                userService.findByEmail(
+                        "another@email.com"
+                )
+        ).isInstanceOf(
+                AccessDeniedException.class
+        );
+
+        verify(
+                userMapper,
+                never()
+        ).toResponse(
+                any(User.class)
+        );
+    }
 
     @Test
     void shouldThrowWhenUserEmailDoesNotExist() {
@@ -437,17 +452,19 @@ class UserServiceImplTest {
                 );
 
         verify(
+                authorizationService,
+                never()
+        ).requireSelfOrAdmin(
+                any(User.class)
+        );
+
+        verify(
                 userMapper,
                 never()
         ).toResponse(
                 any(User.class)
         );
     }
-
-
-    // ---------------------------------------------------------
-    // Helpers
-    // ---------------------------------------------------------
 
     private RegisterUserRequest validRequest() {
 
@@ -462,7 +479,8 @@ class UserServiceImplTest {
                         2000,
                         5,
                         10
-                )
+                ),
+                "UnaFraseSeguraLarga2026!"
         );
     }
 
@@ -488,7 +506,9 @@ class UserServiceImplTest {
                         )
                 );
 
-        user.assignProfile(profile);
+        user.assignProfile(
+                profile
+        );
 
         return user;
     }

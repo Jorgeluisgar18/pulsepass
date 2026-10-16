@@ -1,5 +1,7 @@
 package com.pulsepass.dto.request;
 
+import com.pulsepass.validation.ValidPassword;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -26,7 +28,11 @@ public record RegisterUserRequest(
         String city,
 
         @NotNull(message = "Birth date is required")
-        LocalDate birthDate
+        LocalDate birthDate,
+
+        @NotBlank(message = "Password is required")
+        @ValidPassword
+        String password
 
 ) {
 }
