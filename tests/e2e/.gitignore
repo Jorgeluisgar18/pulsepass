@@ -1,0 +1,14 @@
+# Archivos privados/locales de ejecución E2E
+*.private.postman_environment.json
+*.secrets.json
+*.secret.json
+*.local.env
+*.local.sql
+.env
+
+# Evidencias que puedan contener información sensible
+evidence-private/
+
+# Archivos temporales
+*.tmp
+*.bak
