@@ -250,6 +250,7 @@ public class SecurityConfig {
                                 )
                                 .hasAnyRole(
                                         "USER",
+                                        "STAFF",
                                         "ADMIN"
                                 )
 
